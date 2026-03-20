@@ -1,0 +1,28 @@
+name: Task
+description: 開発タスク・技術的作業
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: "## タスク"
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 何をするか1〜2文で
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: 完了条件
+      description: チェックリスト形式で
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: technical-notes
+    attributes:
+      label: 技術メモ

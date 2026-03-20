@@ -1,0 +1,40 @@
+name: Feature Request
+description: 新機能の提案・実装タスク
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: "## 新機能リクエスト"
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 何を実現したいか1〜2文で
+      placeholder: "例: Side Panel に PR のフィルタリング機能を追加する"
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: モチベーション
+      description: なぜこの機能が必要か
+      placeholder: "例: PR が多くなると一覧性が下がるため、リポジトリや状態でフィルタしたい"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: 受け入れ条件
+      description: 完了とみなす条件をチェックリストで
+      placeholder: |
+        - [ ] リポジトリ名でフィルタできる
+        - [ ] Approved / CI Failed でフィルタできる
+        - [ ] フィルタ状態が chrome.storage に永続化される
+    validations:
+      required: true
+  - type: textarea
+    id: technical-notes
+    attributes:
+      label: 技術メモ
+      description: 実装方針、影響範囲、注意点など (任意)
+      placeholder: "例: フィルタロジックは Rust/WASM 側で実装する"
