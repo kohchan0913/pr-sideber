@@ -9,10 +9,10 @@ description: 6フェーズ検証ループ (ビルド→型→lint→テスト→
 
 ## 6フェーズ
 
-1. **ビルド**: `pnpm build` + `cd rust-core && wasm-pack build --target web`
-2. **型チェック**: `pnpm check` + `cd rust-core && cargo clippy --all-targets`
-3. **Lint**: Prettier + ESLint + `cd rust-core && cargo fmt --check`
-4. **テスト**: `pnpm test` + `cd rust-core && cargo test` (カバレッジ 80%+)
+1. **ビルド**: `cd rust-core/crates/adapter-wasm && wasm-pack build --target web --dev`
+2. **型チェック**: `pnpm check` + `cd rust-core && cargo clippy --all-targets -- -D warnings`
+3. **Lint**: `pnpm biome ci .` + `pnpm eslint "src/**/*.svelte"` + `cd rust-core && cargo fmt --all -- --check` + `cargo machete` + `cargo audit`
+4. **テスト**: `pnpm test` + `cd rust-core && cargo test --workspace` (カバレッジ 80%+)
 5. **セキュリティ**: `ghp_`, `gho_`, `client_secret`, `access_token` の grep + `eval()` / `innerHTML` の使用チェック
 6. **Diff**: `console.log` 残留、コメントアウトブロック、WASM 境界の破壊的変更
 

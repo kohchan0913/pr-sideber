@@ -1,6 +1,5 @@
 #!/bin/bash
-# PostToolUse hook: TypeScript/Svelte ファイル編集後に fmt + lint を実行
-# Write/Edit ツール実行後に呼ばれる
+# PostToolUse hook: TypeScript/Svelte ファイル編集後に fmt + lint + 型チェックを実行
 
 set -euo pipefail
 
@@ -51,3 +50,10 @@ case "$FILE_PATH" in
     fi
     ;;
 esac
+
+# svelte-check (型チェック)
+if pnpm check 2>&1; then
+  echo "[hook] svelte-check: passed"
+else
+  echo "[hook] WARNING: svelte-check failed" >&2
+fi
