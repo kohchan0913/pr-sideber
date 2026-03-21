@@ -1,2 +1,13 @@
 .envrc
+.env
+.env.local
+.env.*.local
 .claude/settings.local.json
+
+node_modules/
+dist/
+build/
+pkg/
+target/
+.vite/
+*.tsbuildinfo

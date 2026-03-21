@@ -30,20 +30,24 @@ if [ ! -d "node_modules" ]; then
   exit 0
 fi
 
-# Prettier
-if pnpm exec prettier --version >/dev/null 2>&1; then
-  if pnpm exec prettier --write -- "$FILE_PATH" 2>&1; then
-    echo "[hook] prettier: formatted $FILE_PATH"
+# Biome (format + lint)
+if pnpm exec biome --version >/dev/null 2>&1; then
+  if pnpm exec biome check --write -- "$FILE_PATH" 2>&1; then
+    echo "[hook] biome: checked $FILE_PATH"
   else
-    echo "[hook] WARNING: prettier failed for $FILE_PATH" >&2
+    echo "[hook] WARNING: biome failed for $FILE_PATH" >&2
   fi
 fi
 
-# ESLint (autofix)
-if pnpm exec eslint --version >/dev/null 2>&1; then
-  if pnpm exec eslint --fix -- "$FILE_PATH" 2>&1; then
-    echo "[hook] eslint: checked $FILE_PATH"
-  else
-    echo "[hook] WARNING: eslint --fix failed for $FILE_PATH" >&2
-  fi
-fi
+# ESLint (Svelte only)
+case "$FILE_PATH" in
+  *.svelte)
+    if pnpm exec eslint --version >/dev/null 2>&1; then
+      if pnpm exec eslint --fix -- "$FILE_PATH" 2>&1; then
+        echo "[hook] eslint: checked $FILE_PATH"
+      else
+        echo "[hook] WARNING: eslint --fix failed for $FILE_PATH" >&2
+      fi
+    fi
+    ;;
+esac

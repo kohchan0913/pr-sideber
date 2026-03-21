@@ -1,0 +1,16 @@
+{
+	"extends": "@tsconfig/svelte/tsconfig.json",
+	"compilerOptions": {
+		"strict": true,
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"verbatimModuleSyntax": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"noEmit": true,
+		"types": ["chrome"]
+	},
+	"include": ["src/**/*", "src/**/*.svelte"],
+	"exclude": ["node_modules", "dist"]
+}
