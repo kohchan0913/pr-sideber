@@ -51,11 +51,17 @@ HIGH 以上の指摘がある場合:
 2. 再度 `/review` スキルを発火して再レビュー
 3. **最大3回。未解決ならユーザーに報告**
 
+IMPORTANT: 「この Issue のスコープ外」「別 Issue で対応」と判断した指摘は、その場で `gh issue create` して Issue 番号を記録する。口だけで「別 Issue で」と言って作らないのは NG。
+
 ## Phase 6: PR 作成 & 報告
 
 IMPORTANT: PR 作成前に `/verify` スキルを発火して6フェーズ検証を通す。FAIL があれば修正してから再実行。
 
-検証 PASS 後、 **[reference/pr-creation.md](reference/pr-creation.md) を参照して PR を作成する。**
+検証 PASS 後:
+1. コミット & プッシュする
+2. **[reference/pr-creation.md](reference/pr-creation.md) を参照して PR を作成する。ユーザー確認を待たずに自律的に作成すること。**
+3. PR にレビューサマリーをコメントする
+4. ユーザーに PR URL を報告する
 
 ## 異常時
 
