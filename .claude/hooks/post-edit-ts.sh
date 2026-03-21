@@ -34,7 +34,8 @@ if pnpm exec biome --version >/dev/null 2>&1; then
   if pnpm exec biome check --write -- "$FILE_PATH" 2>&1; then
     echo "[hook] biome: checked $FILE_PATH"
   else
-    echo "[hook] WARNING: biome failed for $FILE_PATH" >&2
+    echo "BLOCK: biome failed for $FILE_PATH" >&2
+    exit 2
   fi
 fi
 
@@ -45,7 +46,8 @@ case "$FILE_PATH" in
       if pnpm exec eslint --fix -- "$FILE_PATH" 2>&1; then
         echo "[hook] eslint: checked $FILE_PATH"
       else
-        echo "[hook] WARNING: eslint --fix failed for $FILE_PATH" >&2
+        echo "BLOCK: eslint --fix failed for $FILE_PATH" >&2
+        exit 2
       fi
     fi
     ;;
@@ -55,5 +57,6 @@ esac
 if pnpm check 2>&1; then
   echo "[hook] svelte-check: passed"
 else
-  echo "[hook] WARNING: svelte-check failed" >&2
+  echo "BLOCK: svelte-check failed" >&2
+  exit 2
 fi
