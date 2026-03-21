@@ -22,7 +22,8 @@ $ARGUMENTS の内容から GitHub Issue を作成する。
 
 IMPORTANT: リレーションは本文に書かない。GitHub API でシステム的に設定する。
 
-**[reference/commands.md](reference/commands.md) を参照して API でリンクする。**
+- サブ issue → **[reference/sub-issues.md](reference/sub-issues.md)** を参照
+- ブロッカー → **[reference/blockers.md](reference/blockers.md)** を参照
 
 ## Step 4: 確認
 作成した issue の URL とリレーション設定結果を報告する。
