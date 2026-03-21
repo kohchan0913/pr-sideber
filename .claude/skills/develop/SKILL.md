@@ -44,18 +44,30 @@ IMPORTANT: `/tdd` スキルを発火して実装する。planner の計画を引
 IMPORTANT: `/review` スキルを発火する。
 `/review` スキルが4つの専門 agent (security / architecture / quality / performance) を並列起動して統合レビューを返す。
 
-## Phase 5: 修正 (条件付き)
+## Phase 5: 修正 & 再レビュー
 
-HIGH 以上の指摘がある場合:
-1. `implementer` agent にレビュー結果を渡して修正させる
-2. 再度 `/review` スキルを発火して再レビュー
-3. **最大3回。未解決ならユーザーに報告**
+IMPORTANT: レビュー指摘に基づいてコードを修正した場合、修正の規模・重要度にかかわらず必ず再レビューを通す。「MEDIUM だから再レビュー不要」という自己判断は NG。
+
+1. レビュー指摘を分類する:
+   - **修正する**: `implementer` agent にレビュー結果を渡して修正させる。IMPORTANT: HIGH/MEDIUM/LOW すべての重要度を修正対象とする。重要度が低いことは無視する理由にならない
+   - **スコープ外**: その場で `gh issue create` して Issue 番号を記録する。口だけで「別 Issue で」と言って作らないのは NG
+   - **対応不要** (修正すると副作用が出る場合のみ): 副作用の内容を具体的に明記してスキップ。「軽微だから」「LOW だから」は対応不要の理由にならない
+2. 修正があった場合、再度 `/review` スキルを発火して再レビュー
+3. **修正→再レビューのループは最大3回。** 3回目のレビュー後の残存指摘は以下のルールで処理する:
+   - **HIGH が残存**: ワークフロー中断。ユーザーに報告して判断を仰ぐ
+   - **MEDIUM が残存**: 必ずユーザーに報告し、`gh issue create` で Issue 化する
+   - **LOW が残存**: 内容に応じて動的に判断。ユーザーに報告のみで Issue 化は必須ではない
+4. 修正が一切なかった場合のみ再レビューをスキップして Phase 6 に進む
 
 ## Phase 6: PR 作成 & 報告
 
 IMPORTANT: PR 作成前に `/verify` スキルを発火して6フェーズ検証を通す。FAIL があれば修正してから再実行。
 
-検証 PASS 後、 **[reference/pr-creation.md](reference/pr-creation.md) を参照して PR を作成する。**
+検証 PASS 後:
+1. コミット & プッシュする
+2. **[reference/pr-creation.md](reference/pr-creation.md) を参照して PR を作成する。ユーザー確認を待たずに自律的に作成すること。**
+3. PR にレビューサマリーをコメントする
+4. ユーザーに PR URL を報告する
 
 ## 異常時
 
