@@ -8,8 +8,7 @@
 			"Bash(gh issue:*)",
 			"Bash(gh label:*)",
 			"Bash(gh auth:*)",
-			"Bash(gh api:*)",
-			"Bash(gh issue:*)"
+			"Bash(gh api:*)"
 		],
 		"deny": [
 			"Read(.envrc)",
@@ -51,6 +50,17 @@
 					{
 						"type": "command",
 						"command": "bash .claude/hooks/post-edit-rust.sh"
+					}
+				]
+			}
+		],
+		"SessionStart": [
+			{
+				"matcher": "startup",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "bash .claude/hooks/session-start.sh"
 					}
 				]
 			}
