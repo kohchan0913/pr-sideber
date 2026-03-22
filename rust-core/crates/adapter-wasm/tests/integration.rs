@@ -31,11 +31,7 @@ fn valid_fixture_processes_to_classified_dtos() {
     let processed = usecase::process::process_pull_requests("alice", prs);
 
     assert_eq!(processed.my_prs.items.len(), 2, "alice has 2 PRs");
-    assert_eq!(
-        processed.review_requests.items.len(),
-        1,
-        "1 review request"
-    );
+    assert_eq!(processed.review_requests.items.len(), 1, "1 review request");
 
     // my_prs sorted by updated_at desc: PR #10 (Jan 5) before PR #11 (Jan 3)
     assert_eq!(processed.my_prs.items[0].number, 10);

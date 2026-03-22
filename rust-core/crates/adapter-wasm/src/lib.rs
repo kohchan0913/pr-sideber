@@ -34,8 +34,8 @@ pub fn greet(name: &str) -> JsValue {
 /// * `review_requests` - レビューリクエストされた PR リスト (JsValue にシリアライズ)
 #[wasm_bindgen(js_name = "processPullRequests")]
 pub fn process_pull_requests(raw_json: &str) -> Result<JsValue, JsError> {
-    let prs = parser::parse_pull_request_nodes(raw_json)
-        .map_err(|e| JsError::new(&e.to_string()))?;
+    let prs =
+        parser::parse_pull_request_nodes(raw_json).map_err(|e| JsError::new(&e.to_string()))?;
 
     let processed = usecase::process::process_pull_requests("", prs);
 
@@ -69,7 +69,7 @@ mod tests {
     }
 
     #[test]
-    fn process_pull_requests_with_valid_json() {
+    fn parse_and_process_with_valid_json() {
         let json = r#"{
             "data": {
                 "myPrs": {
@@ -105,7 +105,7 @@ mod tests {
     }
 
     #[test]
-    fn process_pull_requests_with_empty_json() {
+    fn parse_and_process_with_empty_json() {
         let json = r#"{
             "data": {
                 "myPrs": { "edges": [] },
@@ -120,13 +120,13 @@ mod tests {
     }
 
     #[test]
-    fn process_pull_requests_with_invalid_json_returns_error() {
+    fn parse_with_invalid_json_returns_error() {
         let result = parser::parse_pull_request_nodes("not json");
         assert!(result.is_err());
     }
 
     #[test]
-    fn process_pull_requests_classifies_by_author() {
+    fn parse_and_process_classifies_by_author() {
         let json = r#"{
             "data": {
                 "myPrs": {

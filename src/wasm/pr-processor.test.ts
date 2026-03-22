@@ -4,6 +4,7 @@ import type { PrProcessorPort, ProcessedPrsResult } from "../domain/ports/pr-pro
 describe("PrProcessorPort", () => {
 	it("interface is implementable with correct shape", () => {
 		// 型レベルテスト: PrProcessorPort を満たすオブジェクトが作成可能であること
+		// TODO: 実際の WasmPrProcessor との型互換は WASM ビルド後に結合テストで検証する
 		const mockProcessor: PrProcessorPort = {
 			processPullRequests(_rawJson: string): ProcessedPrsResult {
 				return {

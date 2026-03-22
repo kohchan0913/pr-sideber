@@ -318,9 +318,13 @@ mod tests {
     }
 
     #[test]
-    fn invalid_json_returns_error() {
+    fn invalid_json_returns_parse_error() {
         let result = parse_pull_request_nodes("not valid json at all");
-        assert!(result.is_err(), "invalid JSON should return error");
+        let err = result.expect_err("invalid JSON should return error");
+        assert!(
+            matches!(err, WasmError::ParseError(_)),
+            "should be ParseError variant, got: {err:?}"
+        );
     }
 
     #[test]
@@ -453,5 +457,308 @@ mod tests {
 
         let prs = parse_pull_request_nodes(json).expect("should parse");
         assert_eq!(prs.len(), 2);
+        assert_eq!(prs[0].id(), "PR_1", "myPrs should come first");
+        assert_eq!(prs[1].id(), "PR_2", "reviewRequested should come second");
+    }
+
+    #[test]
+    fn data_null_returns_error_or_empty() {
+        let json = r#"{"data": null}"#;
+        let result = parse_pull_request_nodes(json);
+        // data が null の場合、エラーまたは空 Vec のどちらかであること
+        if let Ok(prs) = result {
+            assert!(prs.is_empty(), "data:null should yield empty Vec");
+        }
+    }
+
+    #[test]
+    fn review_decision_changes_requested_maps_correctly() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": "CHANGES_REQUESTED",
+                                "author": { "login": "alice" },
+                                "commits": { "nodes": [] },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z"
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let prs = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(prs[0].approval_status(), ApprovalStatus::ChangesRequested);
+    }
+
+    #[test]
+    fn review_decision_review_required_maps_correctly() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": "REVIEW_REQUIRED",
+                                "author": { "login": "alice" },
+                                "commits": { "nodes": [] },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z"
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let prs = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(prs[0].approval_status(), ApprovalStatus::ReviewRequired);
+    }
+
+    #[test]
+    fn ci_state_failure_maps_to_failed() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": null,
+                                "author": { "login": "alice" },
+                                "commits": {
+                                    "nodes": [
+                                        {
+                                            "commit": {
+                                                "statusCheckRollup": {
+                                                    "state": "FAILURE"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z"
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let prs = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(prs[0].ci_status(), CiStatus::Failed);
+    }
+
+    #[test]
+    fn ci_state_pending_maps_to_pending() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": null,
+                                "author": { "login": "alice" },
+                                "commits": {
+                                    "nodes": [
+                                        {
+                                            "commit": {
+                                                "statusCheckRollup": {
+                                                    "state": "PENDING"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z"
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let prs = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(prs[0].ci_status(), CiStatus::Pending);
+    }
+
+    #[test]
+    fn ci_state_error_maps_to_failed() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": null,
+                                "author": { "login": "alice" },
+                                "commits": {
+                                    "nodes": [
+                                        {
+                                            "commit": {
+                                                "statusCheckRollup": {
+                                                    "state": "ERROR"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z"
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let prs = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(prs[0].ci_status(), CiStatus::Failed);
+    }
+
+    #[test]
+    fn unknown_ci_state_returns_error() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": null,
+                                "author": { "login": "alice" },
+                                "commits": {
+                                    "nodes": [
+                                        {
+                                            "commit": {
+                                                "statusCheckRollup": {
+                                                    "state": "UNKNOWN_STATE"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z"
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let result = parse_pull_request_nodes(json);
+        assert!(result.is_err(), "unknown CI state should return error");
+    }
+
+    #[test]
+    fn my_prs_null_with_review_requested_present() {
+        let json = r#"{
+            "data": {
+                "myPrs": null,
+                "reviewRequested": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "review pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": null,
+                                "author": { "login": "bob" },
+                                "commits": { "nodes": [] },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z"
+                            }
+                        }
+                    ]
+                }
+            }
+        }"#;
+
+        let prs = parse_pull_request_nodes(json).expect("should parse when myPrs is null");
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].id(), "PR_1");
+    }
+
+    #[test]
+    fn review_requested_null_with_my_prs_present() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "my pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": null,
+                                "author": { "login": "alice" },
+                                "commits": { "nodes": [] },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z"
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": null
+            }
+        }"#;
+
+        let prs =
+            parse_pull_request_nodes(json).expect("should parse when reviewRequested is null");
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].id(), "PR_1");
     }
 }
