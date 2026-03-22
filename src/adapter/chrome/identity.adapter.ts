@@ -170,8 +170,8 @@ export class ChromeIdentityAdapter implements AuthPort {
 
 		const token = this.validateTokenData(data);
 		await this.storage.set(TOKEN_STORAGE_KEY, token);
-		this.cachedAuthenticated = true;
-		this.cachedExpiresAt = token.expiresAt;
+		this.cachedAuthenticated = null;
+		this.cachedExpiresAt = undefined;
 		return { status: "success", token };
 	}
 
@@ -332,8 +332,8 @@ export class ChromeIdentityAdapter implements AuthPort {
 		const data = (await response.json()) as Record<string, unknown>;
 		const newToken = this.validateTokenData(data);
 		await this.storage.set(TOKEN_STORAGE_KEY, newToken);
-		this.cachedAuthenticated = true;
-		this.cachedExpiresAt = newToken.expiresAt;
+		this.cachedAuthenticated = null;
+		this.cachedExpiresAt = undefined;
 		return newToken;
 	}
 
