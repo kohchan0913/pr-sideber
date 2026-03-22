@@ -1,9 +1,7 @@
 export type OAuthConfig = {
 	readonly clientId: string;
-	readonly clientSecret: string;
-	readonly authorizationEndpoint: string;
+	readonly deviceCodeEndpoint: string;
 	readonly tokenEndpoint: string;
-	readonly redirectUri: string;
 	readonly scopes: readonly string[];
 };
 
@@ -13,11 +11,29 @@ export type AuthToken = {
 	readonly scope: string;
 };
 
+export type DeviceCodeResponse = {
+	readonly deviceCode: string;
+	readonly userCode: string;
+	readonly verificationUri: string;
+	readonly expiresIn: number;
+	readonly interval: number;
+};
+
+/** Device Flow 1回分のポーリング結果 */
+export type PollResult =
+	| { readonly status: "success"; readonly token: AuthToken }
+	| { readonly status: "pending" }
+	| { readonly status: "slow_down"; readonly interval: number }
+	| { readonly status: "expired" }
+	| { readonly status: "denied" };
+
 export type AuthErrorCode =
 	| "authorization_failed"
 	| "token_exchange_failed"
-	| "csrf_mismatch"
-	| "user_cancelled";
+	| "device_code_request_failed"
+	| "device_code_validation_failed"
+	| "device_flow_expired"
+	| "device_flow_denied";
 
 export class AuthError extends Error {
 	readonly code: AuthErrorCode;
