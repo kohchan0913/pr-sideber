@@ -8,6 +8,7 @@ use crate::error::WasmError;
 // TS 側の SearchEdge / GraphQLResponse 型と同等の構造。
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GraphQLResponse {
     pub data: Option<GraphQLData>,
 }
@@ -82,13 +83,72 @@ pub struct RepositoryRef {
 
 /// GraphQL レスポンスの JSON 文字列をパースし、PR ノードの Vec に変換する。
 /// null ノードはスキップする。
-pub fn parse_pull_request_nodes(_json: &str) -> Result<Vec<PullRequest>, WasmError> {
-    todo!()
+pub fn parse_pull_request_nodes(json: &str) -> Result<Vec<PullRequest>, WasmError> {
+    let response: GraphQLResponse = serde_json::from_str(json)?;
+
+    let data = match response.data {
+        Some(d) => d,
+        None => return Ok(Vec::new()),
+    };
+
+    let empty_edges = Vec::new();
+
+    let my_pr_edges = data
+        .my_prs
+        .as_ref()
+        .map_or(&empty_edges, |conn| &conn.edges);
+    let review_edges = data
+        .review_requested
+        .as_ref()
+        .map_or(&empty_edges, |conn| &conn.edges);
+
+    let mut result = Vec::new();
+
+    for edge in my_pr_edges {
+        if let Some(node) = &edge.node {
+            result.push(convert_node_to_pull_request(node)?);
+        }
+    }
+
+    for edge in review_edges {
+        if let Some(node) = &edge.node {
+            result.push(convert_node_to_pull_request(node)?);
+        }
+    }
+
+    Ok(result)
 }
 
 /// 単一の PrNode を domain の PullRequest に変換する。
-pub fn convert_node_to_pull_request(_node: &PrNode) -> Result<PullRequest, WasmError> {
-    todo!()
+pub fn convert_node_to_pull_request(node: &PrNode) -> Result<PullRequest, WasmError> {
+    let approval_status =
+        usecase::determine::determine_approval_status(node.review_decision.as_deref())?;
+
+    let ci_state = node
+        .commits
+        .nodes
+        .last()
+        .and_then(|cn| cn.commit.status_check_rollup.as_ref())
+        .map(|rollup| rollup.state.as_str());
+    let ci_status = usecase::determine::determine_ci_status(ci_state)?;
+
+    let pr = PullRequest::new(
+        node.id.clone(),
+        node.number,
+        node.title.clone(),
+        node.author.login.clone(),
+        node.url.clone(),
+        node.repository.name_with_owner.clone(),
+        node.is_draft,
+        approval_status,
+        ci_status,
+        node.additions.unwrap_or(0),
+        node.deletions.unwrap_or(0),
+        node.created_at.clone(),
+        node.updated_at.clone(),
+    )?;
+
+    Ok(pr)
 }
 
 #[cfg(test)]

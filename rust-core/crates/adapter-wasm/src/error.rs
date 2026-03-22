@@ -12,22 +12,25 @@ pub enum WasmError {
 }
 
 impl fmt::Display for WasmError {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WasmError::ParseError(err) => write!(f, "JSON parse error: {err}"),
+            WasmError::DomainError(err) => write!(f, "domain error: {err}"),
+        }
     }
 }
 
 impl std::error::Error for WasmError {}
 
 impl From<serde_json::Error> for WasmError {
-    fn from(_err: serde_json::Error) -> Self {
-        todo!()
+    fn from(err: serde_json::Error) -> Self {
+        WasmError::ParseError(err)
     }
 }
 
 impl From<DomainError> for WasmError {
-    fn from(_err: DomainError) -> Self {
-        todo!()
+    fn from(err: DomainError) -> Self {
+        WasmError::DomainError(err)
     }
 }
 
