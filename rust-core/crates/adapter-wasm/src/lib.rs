@@ -33,11 +33,11 @@ pub fn greet(name: &str) -> JsValue {
 /// * `my_prs` - 自分が author の PR リスト (JsValue にシリアライズ)
 /// * `review_requests` - レビューリクエストされた PR リスト (JsValue にシリアライズ)
 #[wasm_bindgen(js_name = "processPullRequests")]
-pub fn process_pull_requests(raw_json: &str) -> Result<JsValue, JsError> {
+pub fn process_pull_requests(raw_json: &str, login: &str) -> Result<JsValue, JsError> {
     let prs =
         parser::parse_pull_request_nodes(raw_json).map_err(|e| JsError::new(&e.to_string()))?;
 
-    let processed = usecase::process::process_pull_requests("", prs);
+    let processed = usecase::process::process_pull_requests(login, prs);
 
     serde_wasm_bindgen::to_value(&ProcessedPrsResult {
         my_prs: processed.my_prs,

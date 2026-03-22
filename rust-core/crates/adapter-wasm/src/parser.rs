@@ -8,7 +8,6 @@ use crate::error::WasmError;
 // TS 側の SearchEdge / GraphQLResponse 型と同等の構造。
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct GraphQLResponse {
     pub data: Option<GraphQLData>,
 }
@@ -88,30 +87,24 @@ pub fn parse_pull_request_nodes(json: &str) -> Result<Vec<PullRequest>, WasmErro
 
     let data = match response.data {
         Some(d) => d,
-        None => return Ok(Vec::new()),
+        None => return Err(WasmError::EmptyResponse),
     };
 
-    let empty_edges = Vec::new();
-
-    let my_pr_edges = data
-        .my_prs
-        .as_ref()
-        .map_or(&empty_edges, |conn| &conn.edges);
+    let my_pr_edges = data.my_prs.map_or_else(Vec::new, |conn| conn.edges);
     let review_edges = data
         .review_requested
-        .as_ref()
-        .map_or(&empty_edges, |conn| &conn.edges);
+        .map_or_else(Vec::new, |conn| conn.edges);
 
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(my_pr_edges.len() + review_edges.len());
 
     for edge in my_pr_edges {
-        if let Some(node) = &edge.node {
+        if let Some(node) = edge.node {
             result.push(convert_node_to_pull_request(node)?);
         }
     }
 
     for edge in review_edges {
-        if let Some(node) = &edge.node {
+        if let Some(node) = edge.node {
             result.push(convert_node_to_pull_request(node)?);
         }
     }
@@ -120,7 +113,8 @@ pub fn parse_pull_request_nodes(json: &str) -> Result<Vec<PullRequest>, WasmErro
 }
 
 /// 単一の PrNode を domain の PullRequest に変換する。
-pub fn convert_node_to_pull_request(node: &PrNode) -> Result<PullRequest, WasmError> {
+/// 所有権を取得し、不要な String clone を排除する。
+pub fn convert_node_to_pull_request(node: PrNode) -> Result<PullRequest, WasmError> {
     let approval_status =
         usecase::determine::determine_approval_status(node.review_decision.as_deref())?;
 
@@ -133,19 +127,19 @@ pub fn convert_node_to_pull_request(node: &PrNode) -> Result<PullRequest, WasmEr
     let ci_status = usecase::determine::determine_ci_status(ci_state)?;
 
     let pr = PullRequest::new(
-        node.id.clone(),
+        node.id,
         node.number,
-        node.title.clone(),
-        node.author.login.clone(),
-        node.url.clone(),
-        node.repository.name_with_owner.clone(),
+        node.title,
+        node.author.login,
+        node.url,
+        node.repository.name_with_owner,
         node.is_draft,
         approval_status,
         ci_status,
         node.additions.unwrap_or(0),
         node.deletions.unwrap_or(0),
-        node.created_at.clone(),
-        node.updated_at.clone(),
+        node.created_at,
+        node.updated_at,
     )?;
 
     Ok(pr)

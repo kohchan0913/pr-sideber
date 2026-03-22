@@ -6,7 +6,7 @@ describe("PrProcessorPort", () => {
 		// 型レベルテスト: PrProcessorPort を満たすオブジェクトが作成可能であること
 		// TODO: 実際の WasmPrProcessor との型互換は WASM ビルド後に結合テストで検証する
 		const mockProcessor: PrProcessorPort = {
-			processPullRequests(_rawJson: string): ProcessedPrsResult {
+			processPullRequests(_rawJson: string, _login: string): ProcessedPrsResult {
 				return {
 					myPrs: { items: [], totalCount: 0 },
 					reviewRequests: { items: [], totalCount: 0 },
@@ -14,7 +14,7 @@ describe("PrProcessorPort", () => {
 			},
 		};
 
-		const result = mockProcessor.processPullRequests("{}");
+		const result = mockProcessor.processPullRequests("{}", "testuser");
 		expect(result.myPrs).toBeDefined();
 		expect(result.reviewRequests).toBeDefined();
 		expect(result.myPrs.items).toEqual([]);

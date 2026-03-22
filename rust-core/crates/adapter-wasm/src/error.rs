@@ -9,6 +9,8 @@ pub enum WasmError {
     ParseError(serde_json::Error),
     /// domain 層のバリデーションエラー。
     DomainError(DomainError),
+    /// GraphQL レスポンスの data フィールドが null だった場合。
+    EmptyResponse,
 }
 
 impl fmt::Display for WasmError {
@@ -16,6 +18,7 @@ impl fmt::Display for WasmError {
         match self {
             WasmError::ParseError(err) => write!(f, "JSON parse error: {err}"),
             WasmError::DomainError(err) => write!(f, "domain error: {err}"),
+            WasmError::EmptyResponse => write!(f, "GraphQL response data is null"),
         }
     }
 }

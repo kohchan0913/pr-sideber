@@ -1,4 +1,25 @@
-import type { PrListDto } from "../../../rust-core/crates/adapter-wasm/pkg/adapter_wasm";
+/** Rust の domain::dto::PrItemDto に対応する TypeScript 型 */
+export interface PrItemDto {
+	readonly id: string;
+	readonly number: number;
+	readonly title: string;
+	readonly author: string;
+	readonly url: string;
+	readonly repository: string;
+	readonly isDraft: boolean;
+	readonly approvalStatus: string;
+	readonly ciStatus: string;
+	readonly additions: number;
+	readonly deletions: number;
+	readonly createdAt: string;
+	readonly updatedAt: string;
+}
+
+/** Rust の domain::dto::PrListDto に対応する TypeScript 型 */
+export interface PrListDto {
+	readonly items: readonly PrItemDto[];
+	readonly totalCount: number;
+}
 
 export type ProcessedPrsResult = {
 	readonly myPrs: PrListDto;
@@ -6,5 +27,5 @@ export type ProcessedPrsResult = {
 };
 
 export interface PrProcessorPort {
-	processPullRequests(rawJson: string): ProcessedPrsResult;
+	processPullRequests(rawJson: string, login: string): ProcessedPrsResult;
 }
