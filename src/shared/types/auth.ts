@@ -1,14 +1,12 @@
 export type OAuthConfig = {
 	readonly clientId: string;
-	readonly clientSecret: string;
-	readonly authorizationEndpoint: string;
+	readonly deviceCodeEndpoint: string;
 	readonly tokenEndpoint: string;
-	readonly redirectUri: string;
 	readonly scopes: readonly string[];
 };
 
 import type { AuthToken } from "../../domain/types/auth";
-export type { AuthToken } from "../../domain/types/auth";
+export type { AuthToken, DeviceCodeResponse, PollResult } from "../../domain/types/auth";
 
 export function isAuthToken(value: unknown): value is AuthToken {
 	if (typeof value !== "object" || value === null) {
@@ -27,8 +25,10 @@ export function isAuthToken(value: unknown): value is AuthToken {
 export type AuthErrorCode =
 	| "authorization_failed"
 	| "token_exchange_failed"
-	| "csrf_mismatch"
-	| "user_cancelled";
+	| "device_code_request_failed"
+	| "device_code_validation_failed"
+	| "device_flow_expired"
+	| "device_flow_denied";
 
 export class AuthError extends Error {
 	readonly code: AuthErrorCode;

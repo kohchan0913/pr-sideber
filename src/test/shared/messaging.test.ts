@@ -37,7 +37,7 @@ describe("sendMessage", () => {
 		);
 
 		const { sendMessage } = await import("../../shared/messaging");
-		const result = await sendMessage("AUTH_LOGIN");
+		const result = await sendMessage("AUTH_LOGOUT");
 
 		expect(result).toEqual({ ok: true, data: undefined });
 	});
@@ -46,16 +46,16 @@ describe("sendMessage", () => {
 		const mock = getChromeMock();
 		mock.runtime.sendMessage.mockImplementation(
 			(_message: unknown, callback: (response: unknown) => void) => {
-				callback({ ok: false, error: { code: "AUTH_LOGIN_ERROR", message: "Failed" } });
+				callback({ ok: false, error: { code: "AUTH_LOGOUT_ERROR", message: "Failed" } });
 			},
 		);
 
 		const { sendMessage } = await import("../../shared/messaging");
-		const result = await sendMessage("AUTH_LOGIN");
+		const result = await sendMessage("AUTH_LOGOUT");
 
 		expect(result).toEqual({
 			ok: false,
-			error: { code: "AUTH_LOGIN_ERROR", message: "Failed" },
+			error: { code: "AUTH_LOGOUT_ERROR", message: "Failed" },
 		});
 	});
 

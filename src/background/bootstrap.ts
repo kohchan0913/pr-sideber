@@ -16,7 +16,7 @@ export type AppServices = {
  * Composition Root: Adapter を Port に注入してアプリケーションを構成する
  */
 export function initializeApp(): AppServices {
-	const config = createOAuthConfig(chrome.identity.getRedirectURL());
+	const config = createOAuthConfig();
 	const storage = new ChromeStorageAdapter();
 	const auth = new ChromeIdentityAdapter(storage, config);
 	const githubApi = new GitHubGraphQLClient(async () => {

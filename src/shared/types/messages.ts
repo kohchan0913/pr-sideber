@@ -1,19 +1,28 @@
-export const MESSAGE_TYPES = ["AUTH_LOGIN", "AUTH_LOGOUT", "AUTH_STATUS"] as const;
+import type { DeviceCodeResponse, PollResult } from "./auth";
+
+export const MESSAGE_TYPES = [
+	"AUTH_LOGOUT",
+	"AUTH_STATUS",
+	"AUTH_DEVICE_CODE",
+	"AUTH_DEVICE_POLL",
+] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];
 
 /** メッセージタイプ → リクエストペイロードのマッピング */
 export type RequestMap = {
-	AUTH_LOGIN: undefined;
 	AUTH_LOGOUT: undefined;
 	AUTH_STATUS: undefined;
+	AUTH_DEVICE_CODE: undefined;
+	AUTH_DEVICE_POLL: { deviceCode: string };
 };
 
 /** メッセージタイプ → レスポンスデータのマッピング */
 export type ResponseDataMap = {
-	AUTH_LOGIN: undefined;
 	AUTH_LOGOUT: undefined;
 	AUTH_STATUS: { isAuthenticated: boolean };
+	AUTH_DEVICE_CODE: DeviceCodeResponse;
+	AUTH_DEVICE_POLL: PollResult;
 };
 
 export type MessageError = {

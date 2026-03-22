@@ -4,24 +4,31 @@ import { MESSAGE_TYPES, isRequestMessage } from "../../../shared/types/messages"
 describe("messages", () => {
 	describe("MESSAGE_TYPES", () => {
 		it("should contain all message types", () => {
-			expect(MESSAGE_TYPES).toContain("AUTH_LOGIN");
 			expect(MESSAGE_TYPES).toContain("AUTH_LOGOUT");
 			expect(MESSAGE_TYPES).toContain("AUTH_STATUS");
-			expect(MESSAGE_TYPES).toHaveLength(3);
+			expect(MESSAGE_TYPES).toContain("AUTH_DEVICE_CODE");
+			expect(MESSAGE_TYPES).toContain("AUTH_DEVICE_POLL");
+			expect(MESSAGE_TYPES).toHaveLength(4);
 		});
 	});
 
 	describe("isRequestMessage", () => {
-		it("should return true for valid AUTH_LOGIN message", () => {
-			expect(isRequestMessage({ type: "AUTH_LOGIN" })).toBe(true);
-		});
-
 		it("should return true for valid AUTH_LOGOUT message", () => {
 			expect(isRequestMessage({ type: "AUTH_LOGOUT" })).toBe(true);
 		});
 
 		it("should return true for valid AUTH_STATUS message", () => {
 			expect(isRequestMessage({ type: "AUTH_STATUS" })).toBe(true);
+		});
+
+		it("should return true for valid AUTH_DEVICE_CODE message", () => {
+			expect(isRequestMessage({ type: "AUTH_DEVICE_CODE" })).toBe(true);
+		});
+
+		it("should return true for valid AUTH_DEVICE_POLL message", () => {
+			expect(
+				isRequestMessage({ type: "AUTH_DEVICE_POLL", payload: { deviceCode: "abc12345" } }),
+			).toBe(true);
 		});
 
 		it("should return false for null", () => {
@@ -49,7 +56,7 @@ describe("messages", () => {
 		});
 
 		it("should return false for primitive values", () => {
-			expect(isRequestMessage("AUTH_LOGIN")).toBe(false);
+			expect(isRequestMessage("AUTH_LOGOUT")).toBe(false);
 			expect(isRequestMessage(42)).toBe(false);
 			expect(isRequestMessage(true)).toBe(false);
 		});

@@ -1,13 +1,23 @@
 import type { AuthPort } from "../../domain/ports/auth.port";
 import type { StoragePort } from "../../domain/ports/storage.port";
-import { generateCodeChallenge, generateCodeVerifier, generateState } from "../../shared/crypto";
-import type { AuthToken, OAuthConfig } from "../../shared/types/auth";
+import type {
+	AuthToken,
+	DeviceCodeResponse,
+	OAuthConfig,
+	PollResult,
+} from "../../shared/types/auth";
 import { AuthError, isAuthToken } from "../../shared/types/auth";
 
 const TOKEN_STORAGE_KEY = "github_auth_token";
 
+/** device_code の最小長。GitHub は40文字 hex を返す */
+const DEVICE_CODE_MIN_LENGTH = 8;
+const DEVICE_CODE_MAX_LENGTH = 256;
+
+/** error_description の最大長。過剰な文字列の注入を防ぐ */
+const ERROR_DESCRIPTION_MAX_LENGTH = 500;
+
 export class ChromeIdentityAdapter implements AuthPort {
-	private pendingAuth: Promise<AuthToken> | null = null;
 	private cachedAuthenticated: boolean | null = null;
 
 	constructor(
@@ -23,14 +33,97 @@ export class ChromeIdentityAdapter implements AuthPort {
 		});
 	}
 
-	authorize(): Promise<AuthToken> {
-		if (this.pendingAuth) {
-			return this.pendingAuth;
-		}
-		this.pendingAuth = this.executeAuthFlow().finally(() => {
-			this.pendingAuth = null;
+	async requestDeviceCode(): Promise<DeviceCodeResponse> {
+		const body = new URLSearchParams({
+			client_id: this.config.clientId,
+			scope: this.config.scopes.join(" "),
 		});
-		return this.pendingAuth;
+
+		let response: Response;
+		try {
+			response = await fetch(this.config.deviceCodeEndpoint, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/x-www-form-urlencoded",
+					Accept: "application/json",
+				},
+				body: body.toString(),
+			});
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : "Unknown error";
+			throw new AuthError("device_code_request_failed", "Device code request failed");
+		}
+
+		if (!response.ok) {
+			throw new AuthError(
+				"device_code_request_failed",
+				`Device code request failed: ${response.status} ${response.statusText}`,
+			);
+		}
+
+		const data = (await response.json()) as Record<string, unknown>;
+		return this.validateDeviceCodeData(data);
+	}
+
+	/**
+	 * 1回分のトークン取得試行。
+	 * Service Worker の30秒制限に対応するため、ループせず即座に結果を返す。
+	 * ポーリングの繰り返し制御は Side Panel 側 (auth.usecase.ts) が担う。
+	 */
+	async pollForToken(deviceCode: string): Promise<PollResult> {
+		let response: Response;
+		try {
+			response = await fetch(this.config.tokenEndpoint, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/x-www-form-urlencoded",
+					Accept: "application/json",
+				},
+				body: new URLSearchParams({
+					client_id: this.config.clientId,
+					device_code: deviceCode,
+					grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+				}).toString(),
+			});
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : "Unknown error";
+			throw new AuthError("token_exchange_failed", "Token polling failed");
+		}
+
+		if (!response.ok) {
+			throw new AuthError("token_exchange_failed", `Token polling failed: ${response.status}`);
+		}
+
+		const data = (await response.json()) as Record<string, unknown>;
+
+		if (typeof data.error === "string") {
+			switch (data.error) {
+				case "authorization_pending":
+					return { status: "pending" };
+				case "slow_down": {
+					const interval = typeof data.interval === "number" ? data.interval : 10;
+					return { status: "slow_down", interval };
+				}
+				case "expired_token":
+					return { status: "expired" };
+				case "access_denied":
+					return { status: "denied" };
+				default: {
+					const raw =
+						typeof data.error_description === "string" ? data.error_description : data.error;
+					const description =
+						typeof raw === "string" && raw.length > ERROR_DESCRIPTION_MAX_LENGTH
+							? raw.slice(0, ERROR_DESCRIPTION_MAX_LENGTH)
+							: raw;
+					throw new AuthError("token_exchange_failed", `Token exchange failed: ${description}`);
+				}
+			}
+		}
+
+		const token = this.validateTokenData(data);
+		await this.storage.set(TOKEN_STORAGE_KEY, token);
+		this.cachedAuthenticated = true;
+		return { status: "success", token };
 	}
 
 	async getToken(): Promise<AuthToken | null> {
@@ -59,132 +152,40 @@ export class ChromeIdentityAdapter implements AuthPort {
 		return true;
 	}
 
-	private async executeAuthFlow(): Promise<AuthToken> {
-		const state = generateState();
-		const codeVerifier = generateCodeVerifier();
-		const codeChallenge = await generateCodeChallenge(codeVerifier);
-
-		const redirectUrl = await this.launchAuthFlow(state, codeChallenge);
-		const { code, returnedState } = this.parseRedirectUrl(redirectUrl);
-
-		this.verifyState(state, returnedState);
-
-		const token = await this.exchangeCodeForToken(code, codeVerifier);
-		await this.storage.set(TOKEN_STORAGE_KEY, token);
-		this.cachedAuthenticated = true;
-		return token;
-	}
-
-	private async launchAuthFlow(state: string, codeChallenge: string): Promise<string> {
-		const authUrl = this.buildAuthorizationUrl(state, codeChallenge);
-
-		let responseUrl: string | undefined;
-		try {
-			responseUrl = await chrome.identity.launchWebAuthFlow({
-				url: authUrl,
-				interactive: true,
-			});
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			throw new AuthError("user_cancelled", "User cancelled the authentication flow", {
-				cause: new Error(message),
-			});
+	private validateDeviceCodeData(data: Record<string, unknown>): DeviceCodeResponse {
+		if (typeof data.device_code !== "string" || !data.device_code) {
+			throw new AuthError("device_code_validation_failed", "Missing device_code in response");
+		}
+		if (typeof data.user_code !== "string" || !data.user_code) {
+			throw new AuthError("device_code_validation_failed", "Missing user_code in response");
+		}
+		if (typeof data.verification_uri !== "string" || !data.verification_uri) {
+			throw new AuthError("device_code_validation_failed", "Missing verification_uri in response");
+		}
+		if (typeof data.expires_in !== "number" || data.expires_in <= 0) {
+			throw new AuthError("device_code_validation_failed", "Invalid expires_in in response");
+		}
+		if (typeof data.interval !== "number" || data.interval <= 0) {
+			throw new AuthError("device_code_validation_failed", "Invalid interval in response");
 		}
 
-		if (!responseUrl) {
-			throw new AuthError("user_cancelled", "Authentication flow returned no response");
+		if (
+			data.device_code.length < DEVICE_CODE_MIN_LENGTH ||
+			data.device_code.length > DEVICE_CODE_MAX_LENGTH
+		) {
+			throw new AuthError("device_code_validation_failed", "Invalid device_code length");
 		}
 
-		return responseUrl;
-	}
-
-	private buildAuthorizationUrl(state: string, codeChallenge: string): string {
-		const params = new URLSearchParams({
-			client_id: this.config.clientId,
-			redirect_uri: this.config.redirectUri,
-			scope: this.config.scopes.join(" "),
-			state,
-			code_challenge: codeChallenge,
-			code_challenge_method: "S256",
-		});
-		return `${this.config.authorizationEndpoint}?${params.toString()}`;
-	}
-
-	private parseRedirectUrl(redirectUrl: string): {
-		code: string;
-		returnedState: string;
-	} {
-		const url = new URL(redirectUrl);
-		const code = url.searchParams.get("code");
-		const returnedState = url.searchParams.get("state");
-
-		if (!code || !returnedState) {
-			throw new AuthError("authorization_failed", "Missing code or state in redirect URL");
-		}
-
-		return { code, returnedState };
-	}
-
-	private verifyState(expected: string, actual: string): void {
-		if (expected !== actual) {
-			throw new AuthError("csrf_mismatch", "State parameter mismatch: possible CSRF attack");
-		}
-	}
-
-	private async exchangeCodeForToken(code: string, codeVerifier: string): Promise<AuthToken> {
-		const body = new URLSearchParams({
-			client_id: this.config.clientId,
-			client_secret: this.config.clientSecret,
-			code,
-			redirect_uri: this.config.redirectUri,
-			code_verifier: codeVerifier,
-		});
-
-		let response: Response;
-		try {
-			response = await fetch(this.config.tokenEndpoint, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/x-www-form-urlencoded",
-					Accept: "application/json",
-				},
-				body: body.toString(),
-			});
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			throw new AuthError("token_exchange_failed", `Token exchange failed: ${message}`);
-		}
-
-		if (!response.ok) {
-			throw new AuthError(
-				"token_exchange_failed",
-				`Token exchange failed: ${response.status} ${response.statusText}`,
-			);
-		}
-
-		const data = await this.parseResponseBody(response);
-		return this.validateTokenData(data);
-	}
-
-	private async parseResponseBody(response: Response): Promise<Record<string, unknown>> {
-		try {
-			return (await response.json()) as Record<string, unknown>;
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			throw new AuthError(
-				"token_exchange_failed",
-				`Token exchange failed: invalid response body: ${message}`,
-			);
-		}
+		return {
+			deviceCode: data.device_code,
+			userCode: data.user_code,
+			verificationUri: data.verification_uri,
+			expiresIn: data.expires_in,
+			interval: data.interval,
+		};
 	}
 
 	private validateTokenData(data: Record<string, unknown>): AuthToken {
-		if (typeof data.error === "string") {
-			const description =
-				typeof data.error_description === "string" ? data.error_description : data.error;
-			throw new AuthError("token_exchange_failed", `Token exchange failed: ${description}`);
-		}
-
 		if (typeof data.access_token !== "string" || !data.access_token) {
 			throw new AuthError("token_exchange_failed", "Invalid token response: missing access_token");
 		}

@@ -1,56 +1,91 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * Device Flow 対応後の OAuthConfig 型。GREEN フェーズで src/shared/types/auth.ts を書き換え予定。
+ * RED フェーズではテスト内にローカル定義して期待する構造を明示する。
+ * GREEN フェーズで実型に差し替える際に他テストファイルの重複定義も整理する。
+ */
+type DeviceFlowOAuthConfig = {
+	readonly clientId: string;
+	readonly deviceCodeEndpoint: string;
+	readonly tokenEndpoint: string;
+	readonly scopes: readonly string[];
+};
 
 describe("createOAuthConfig", () => {
+	beforeEach(() => {
+		// dynamic import のモジュールキャッシュを破棄し、各テストで再評価させる
+		vi.resetModules();
+	});
+
 	afterEach(() => {
 		vi.unstubAllEnvs();
 	});
 
 	it("should throw when VITE_GITHUB_CLIENT_ID is not set", async () => {
 		vi.stubEnv("VITE_GITHUB_CLIENT_ID", "");
-		vi.stubEnv("VITE_GITHUB_CLIENT_SECRET", "test-secret");
 
 		const mod = await import("../../../shared/config/oauth.config");
 
-		expect(() => mod.createOAuthConfig("https://example.com/redirect")).toThrow(
-			"VITE_GITHUB_CLIENT_ID is not configured",
-		);
+		// Device Flow 対応後は引数なしになる予定。現在のシグネチャでは引数が必要なため型キャストで呼ぶ。
+		const createConfig = mod.createOAuthConfig as unknown as () => DeviceFlowOAuthConfig;
+		expect(() => createConfig()).toThrow("VITE_GITHUB_CLIENT_ID is not configured");
 	});
 
-	it("should throw when VITE_GITHUB_CLIENT_SECRET is not set", async () => {
-		vi.stubEnv("VITE_GITHUB_CLIENT_ID", "test-id");
-		vi.stubEnv("VITE_GITHUB_CLIENT_SECRET", "");
-
-		const mod = await import("../../../shared/config/oauth.config");
-
-		expect(() => mod.createOAuthConfig("https://example.com/redirect")).toThrow(
-			"VITE_GITHUB_CLIENT_SECRET is not configured",
-		);
-	});
-
-	it("should return OAuthConfig when credentials are set", async () => {
+	it("should return OAuthConfig with deviceCodeEndpoint when client ID is set", async () => {
 		vi.stubEnv("VITE_GITHUB_CLIENT_ID", "test-client-id");
-		vi.stubEnv("VITE_GITHUB_CLIENT_SECRET", "test-client-secret");
 
 		const mod = await import("../../../shared/config/oauth.config");
-		const config = mod.createOAuthConfig("https://mock-redirect.chromiumapp.org/");
+		const createConfig = mod.createOAuthConfig as unknown as () => DeviceFlowOAuthConfig;
+		const config = createConfig();
 
 		expect(config).toEqual({
 			clientId: "test-client-id",
-			clientSecret: "test-client-secret",
-			authorizationEndpoint: "https://github.com/login/oauth/authorize",
+			deviceCodeEndpoint: "https://github.com/login/device/code",
 			tokenEndpoint: "https://github.com/login/oauth/access_token",
-			redirectUri: "https://mock-redirect.chromiumapp.org/",
 			scopes: ["repo"],
 		});
 	});
 
-	it("should use the provided redirectUri", async () => {
-		vi.stubEnv("VITE_GITHUB_CLIENT_ID", "test-id");
-		vi.stubEnv("VITE_GITHUB_CLIENT_SECRET", "test-secret");
+	// 以下の not.toHaveProperty テストは toEqual で構造的に保証されているが、
+	// Device Flow 移行で「旧プロパティが存在しないこと」を意図として明示するために残す。
+	it("should not have clientSecret property", async () => {
+		vi.stubEnv("VITE_GITHUB_CLIENT_ID", "test-client-id");
 
 		const mod = await import("../../../shared/config/oauth.config");
-		const config = mod.createOAuthConfig("https://custom-redirect.example.com/");
+		const createConfig = mod.createOAuthConfig as unknown as () => DeviceFlowOAuthConfig;
+		const config = createConfig();
 
-		expect(config.redirectUri).toBe("https://custom-redirect.example.com/");
+		expect(config).not.toHaveProperty("clientSecret");
+	});
+
+	it("should not have authorizationEndpoint property", async () => {
+		vi.stubEnv("VITE_GITHUB_CLIENT_ID", "test-client-id");
+
+		const mod = await import("../../../shared/config/oauth.config");
+		const createConfig = mod.createOAuthConfig as unknown as () => DeviceFlowOAuthConfig;
+		const config = createConfig();
+
+		expect(config).not.toHaveProperty("authorizationEndpoint");
+	});
+
+	it("should not have redirectUri property", async () => {
+		vi.stubEnv("VITE_GITHUB_CLIENT_ID", "test-client-id");
+
+		const mod = await import("../../../shared/config/oauth.config");
+		const createConfig = mod.createOAuthConfig as unknown as () => DeviceFlowOAuthConfig;
+		const config = createConfig();
+
+		expect(config).not.toHaveProperty("redirectUri");
+	});
+
+	it("should have deviceCodeEndpoint pointing to GitHub device code URL", async () => {
+		vi.stubEnv("VITE_GITHUB_CLIENT_ID", "test-client-id");
+
+		const mod = await import("../../../shared/config/oauth.config");
+		const createConfig = mod.createOAuthConfig as unknown as () => DeviceFlowOAuthConfig;
+		const config = createConfig();
+
+		expect(config.deviceCodeEndpoint).toBe("https://github.com/login/device/code");
 	});
 });

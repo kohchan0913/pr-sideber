@@ -6,7 +6,6 @@ describe("bootstrap", () => {
 	beforeEach(() => {
 		setupChromeMock();
 		vi.stubEnv("VITE_GITHUB_CLIENT_ID", "test-client-id");
-		vi.stubEnv("VITE_GITHUB_CLIENT_SECRET", "test-client-secret");
 	});
 
 	afterEach(() => {
@@ -23,13 +22,6 @@ describe("bootstrap", () => {
 			const services = initializeApp();
 			expect(services).toHaveProperty("auth");
 			expect(services).toHaveProperty("githubApi");
-		});
-
-		it("should pass chrome.identity.getRedirectURL() as redirectUri", () => {
-			const services = initializeApp();
-			expect(services).toHaveProperty("auth");
-			// chrome.identity.getRedirectURL が呼ばれていることを確認
-			expect(chrome.identity.getRedirectURL).toHaveBeenCalled();
 		});
 
 		it("should register message handler via chrome.runtime.onMessage.addListener", () => {

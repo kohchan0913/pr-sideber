@@ -5,7 +5,7 @@ export default defineManifest({
 	name: "PR Sidebar",
 	version: "0.0.1",
 	description: "GitHub PR Dashboard in Chrome Side Panel",
-	permissions: ["sidePanel", "storage", "identity", "alarms"],
+	permissions: ["sidePanel", "storage"],
 	side_panel: {
 		default_path: "src/sidepanel/index.html",
 	},
