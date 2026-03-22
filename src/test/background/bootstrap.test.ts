@@ -30,5 +30,10 @@ describe("bootstrap", () => {
 			// chrome.identity.getRedirectURL が呼ばれていることを確認
 			expect(chrome.identity.getRedirectURL).toHaveBeenCalled();
 		});
+
+		it("should register message handler via chrome.runtime.onMessage.addListener", () => {
+			initializeApp();
+			expect(chrome.runtime.onMessage.addListener).toHaveBeenCalledWith(expect.any(Function));
+		});
 	});
 });
