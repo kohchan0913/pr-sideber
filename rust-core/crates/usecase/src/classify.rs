@@ -8,7 +8,7 @@ pub struct ClassifiedPrs {
 pub fn classify_pull_requests(login: &str, pull_requests: Vec<PullRequest>) -> ClassifiedPrs {
     let (my_prs, review_requests) = pull_requests
         .into_iter()
-        .partition(|pr| pr.author.eq_ignore_ascii_case(login));
+        .partition(|pr| pr.author().eq_ignore_ascii_case(login));
 
     ClassifiedPrs {
         my_prs,
@@ -22,21 +22,22 @@ mod tests {
     use domain::status::{ApprovalStatus, CiStatus};
 
     fn make_pr(author: &str, number: u32) -> PullRequest {
-        PullRequest {
-            id: format!("PR_{number}"),
+        PullRequest::new(
+            format!("PR_{number}"),
             number,
-            title: format!("PR #{number}"),
-            author: author.to_string(),
-            url: format!("https://github.com/owner/repo/pull/{number}"),
-            repository: "owner/repo".to_string(),
-            is_draft: false,
-            approval_status: ApprovalStatus::Approved,
-            ci_status: CiStatus::Passed,
-            additions: 10,
-            deletions: 5,
-            created_at: "2026-01-01T00:00:00Z".to_string(),
-            updated_at: "2026-01-02T00:00:00Z".to_string(),
-        }
+            format!("PR #{number}"),
+            author.to_string(),
+            format!("https://github.com/owner/repo/pull/{number}"),
+            "owner/repo".to_string(),
+            false,
+            ApprovalStatus::Approved,
+            CiStatus::Passed,
+            10,
+            5,
+            "2026-01-01T00:00:00Z".to_string(),
+            "2026-01-02T00:00:00Z".to_string(),
+        )
+        .expect("test PR should be valid")
     }
 
     #[test]
@@ -61,11 +62,15 @@ mod tests {
         let result = classify_pull_requests("alice", prs);
         assert_eq!(result.my_prs.len(), 2);
         assert_eq!(
-            result.my_prs.iter().map(|pr| pr.number).collect::<Vec<_>>(),
+            result
+                .my_prs
+                .iter()
+                .map(|pr| pr.number())
+                .collect::<Vec<_>>(),
             vec![1, 3]
         );
         assert_eq!(result.review_requests.len(), 1);
-        assert_eq!(result.review_requests[0].number, 2);
+        assert_eq!(result.review_requests[0].number(), 2);
     }
 
     #[test]

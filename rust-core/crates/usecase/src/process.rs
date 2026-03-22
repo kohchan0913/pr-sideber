@@ -15,10 +15,10 @@ pub fn process_pull_requests(login: &str, pull_requests: Vec<PullRequest>) -> Pr
     sort_by_updated_at_desc(&mut classified.my_prs);
     sort_by_updated_at_desc(&mut classified.review_requests);
 
-    let my_items: Vec<PrItemDto> = classified.my_prs.into_iter().map(to_pr_item_dto).collect();
+    let my_items: Vec<PrItemDto> = classified.my_prs.iter().map(to_pr_item_dto).collect();
     let review_items: Vec<PrItemDto> = classified
         .review_requests
-        .into_iter()
+        .iter()
         .map(to_pr_item_dto)
         .collect();
 
@@ -40,21 +40,21 @@ pub fn process_pull_requests(login: &str, pull_requests: Vec<PullRequest>) -> Pr
     }
 }
 
-fn to_pr_item_dto(pr: PullRequest) -> PrItemDto {
+fn to_pr_item_dto(pr: &PullRequest) -> PrItemDto {
     PrItemDto {
-        id: pr.id,
-        number: pr.number,
-        title: pr.title,
-        author: pr.author,
-        url: pr.url,
-        repository: pr.repository,
-        is_draft: pr.is_draft,
-        approval_status: pr.approval_status,
-        ci_status: pr.ci_status,
-        additions: pr.additions,
-        deletions: pr.deletions,
-        created_at: pr.created_at,
-        updated_at: pr.updated_at,
+        id: pr.id().to_string(),
+        number: pr.number(),
+        title: pr.title().to_string(),
+        author: pr.author().to_string(),
+        url: pr.url().to_string(),
+        repository: pr.repository().to_string(),
+        is_draft: pr.is_draft(),
+        approval_status: pr.approval_status(),
+        ci_status: pr.ci_status(),
+        additions: pr.additions(),
+        deletions: pr.deletions(),
+        created_at: pr.created_at().to_string(),
+        updated_at: pr.updated_at().to_string(),
     }
 }
 
@@ -64,21 +64,22 @@ mod tests {
     use domain::status::{ApprovalStatus, CiStatus};
 
     fn make_pr(author: &str, number: u32, updated_at: &str) -> PullRequest {
-        PullRequest {
-            id: format!("PR_{number}"),
+        PullRequest::new(
+            format!("PR_{number}"),
             number,
-            title: format!("PR #{number}"),
-            author: author.to_string(),
-            url: format!("https://github.com/owner/repo/pull/{number}"),
-            repository: "owner/repo".to_string(),
-            is_draft: false,
-            approval_status: ApprovalStatus::Approved,
-            ci_status: CiStatus::Passed,
-            additions: 10,
-            deletions: 5,
-            created_at: "2026-01-01T00:00:00Z".to_string(),
-            updated_at: updated_at.to_string(),
-        }
+            format!("PR #{number}"),
+            author.to_string(),
+            format!("https://github.com/owner/repo/pull/{number}"),
+            "owner/repo".to_string(),
+            false,
+            ApprovalStatus::Approved,
+            CiStatus::Passed,
+            10,
+            5,
+            "2026-01-01T00:00:00Z".to_string(),
+            updated_at.to_string(),
+        )
+        .expect("test PR should be valid")
     }
 
     #[test]
