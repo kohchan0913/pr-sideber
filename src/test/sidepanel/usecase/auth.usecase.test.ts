@@ -104,8 +104,8 @@ describe("auth usecase", () => {
 				.waitForAuthorization("device-code-123", 5, 900)
 				.catch((e: unknown) => e);
 
-			// interval (5秒) 経過でポーリング開始 → 3回リトライして全部失敗
-			await vi.advanceTimersByTimeAsync(5000);
+			// interval (5秒) + リトライバックオフ (500ms + 1000ms) で全部失敗
+			await vi.advanceTimersByTimeAsync(6500);
 
 			const error = await promise;
 			expect(error).toBeInstanceOf(Error);
@@ -128,7 +128,8 @@ describe("auth usecase", () => {
 			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
 			const promise = useCase.waitForAuthorization("device-code-123", 5, 900, onStateChange);
 
-			await vi.advanceTimersByTimeAsync(5000);
+			// interval (5秒) + リトライバックオフ (500ms)
+			await vi.advanceTimersByTimeAsync(5500);
 
 			await promise;
 
@@ -151,7 +152,8 @@ describe("auth usecase", () => {
 			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
 			const promise = useCase.waitForAuthorization("device-code-123", 5, 900, onStateChange);
 
-			await vi.advanceTimersByTimeAsync(5000);
+			// interval (5秒) + リトライバックオフ (500ms + 1000ms)
+			await vi.advanceTimersByTimeAsync(6500);
 
 			await promise;
 
@@ -171,7 +173,10 @@ describe("auth usecase", () => {
 				.waitForAuthorization("device-code-123", 5, 900, onStateChange)
 				.catch((e: unknown) => e);
 
+			// interval (5秒) + リトライバックオフ (500ms + 1000ms) を段階的に進める
 			await vi.advanceTimersByTimeAsync(5000);
+			await vi.advanceTimersByTimeAsync(500);
+			await vi.advanceTimersByTimeAsync(1000);
 
 			const error = await promise;
 			expect(error).toBeInstanceOf(Error);
@@ -196,7 +201,8 @@ describe("auth usecase", () => {
 			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
 			const promise = useCase.waitForAuthorization("device-code-123", 5, 900, onStateChange);
 
-			await vi.advanceTimersByTimeAsync(5000);
+			// interval (5秒) + リトライバックオフ (500ms)
+			await vi.advanceTimersByTimeAsync(5500);
 
 			await promise;
 
@@ -220,7 +226,8 @@ describe("auth usecase", () => {
 			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
 			const promise = useCase.waitForAuthorization("device-code-123", 5, 900, onStateChange);
 
-			await vi.advanceTimersByTimeAsync(5000);
+			// interval (5秒) + リトライバックオフ (500ms)
+			await vi.advanceTimersByTimeAsync(5500);
 
 			await promise;
 
@@ -293,7 +300,10 @@ describe("auth usecase", () => {
 				.waitForAuthorization("device-code-123", 5, 900, onStateChange)
 				.catch((e: unknown) => e);
 
+			// interval (5秒) + リトライバックオフ (500ms + 1000ms) を段階的に進める
 			await vi.advanceTimersByTimeAsync(5000);
+			await vi.advanceTimersByTimeAsync(500);
+			await vi.advanceTimersByTimeAsync(1000);
 
 			const error = await promise;
 			expect(error).toBeInstanceOf(Error);

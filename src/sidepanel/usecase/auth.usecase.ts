@@ -8,6 +8,9 @@ const MIN_POLL_INTERVAL_SEC = 5;
 /** ネットワークエラー等の一時障害に対するリトライ上限 */
 const MAX_POLL_RETRIES = 3;
 
+/** slow_down 応答時のポーリング間隔上限 (秒) */
+const MAX_POLL_INTERVAL_SEC = 60;
+
 /** リトライ可能なエラーレスポンスの code 一覧 */
 const RETRYABLE_ERROR_CODES = new Set(["RUNTIME_ERROR", "NO_RESPONSE"]);
 
@@ -74,6 +77,13 @@ export function createAuthUseCase(sendMessage: SendMessage) {
 			let lastError: Error | undefined;
 
 			for (let attempt = 0; attempt < MAX_POLL_RETRIES; attempt++) {
+				if (attempt > 0) {
+					await wait(attempt * 500);
+					if (Date.now() >= deadline) {
+						onStateChange?.({ phase: "expired" });
+						throw new Error("Device flow expired. Please try again.");
+					}
+				}
 				let response: ResponseMessage<"AUTH_DEVICE_POLL">;
 				try {
 					response = await sendMessage("AUTH_DEVICE_POLL", { deviceCode });
@@ -119,7 +129,10 @@ export function createAuthUseCase(sendMessage: SendMessage) {
 				case "pending":
 					continue;
 				case "slow_down":
-					currentInterval = Math.max(result.interval, currentInterval + 5);
+					currentInterval = Math.min(
+						Math.max(result.interval, currentInterval + 5),
+						MAX_POLL_INTERVAL_SEC,
+					);
 					continue;
 				case "expired":
 					onStateChange?.({ phase: "expired" });
