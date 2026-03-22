@@ -8,10 +8,15 @@ import type { AppServices } from "./types";
 
 export type { AppServices };
 
+// biome-ignore lint/style/useConst: initializeApp 内で再代入されるため let が必要
+let services: AppServices | null = null;
+
 /**
  * Composition Root: Adapter を Port に注入してアプリケーションを構成する
  */
 export function initializeApp(): AppServices {
+	if (services !== null) return services;
+
 	const config = createOAuthConfig();
 	const storage = new ChromeStorageAdapter();
 	const auth = new ChromeIdentityAdapter(storage, config);
@@ -25,5 +30,6 @@ export function initializeApp(): AppServices {
 	const handler = createMessageHandler({ auth, githubApi });
 	chrome.runtime.onMessage.addListener(handler);
 
-	return { auth, githubApi };
+	services = { auth, githubApi };
+	return services;
 }

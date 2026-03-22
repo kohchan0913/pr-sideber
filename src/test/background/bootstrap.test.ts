@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initializeApp } from "../../background/bootstrap";
 import { resetChromeMock, setupChromeMock } from "../mocks/chrome.mock";
 
 describe("bootstrap", () => {
 	beforeEach(() => {
+		vi.resetModules();
 		setupChromeMock();
 		vi.stubEnv("GITHUB_CLIENT_ID", "test-client-id");
 	});
@@ -13,20 +13,61 @@ describe("bootstrap", () => {
 		vi.unstubAllEnvs();
 	});
 
+	async function loadInitializeApp() {
+		const mod = await import("../../background/bootstrap");
+		return mod.initializeApp;
+	}
+
 	describe("initializeApp", () => {
-		it("should complete without throwing", () => {
+		it("should complete without throwing", async () => {
+			const initializeApp = await loadInitializeApp();
 			expect(() => initializeApp()).not.toThrow();
 		});
 
-		it("should return AppServices with auth and githubApi", () => {
+		it("should return AppServices with auth and githubApi", async () => {
+			const initializeApp = await loadInitializeApp();
 			const services = initializeApp();
 			expect(services).toHaveProperty("auth");
 			expect(services).toHaveProperty("githubApi");
 		});
 
-		it("should register message handler via chrome.runtime.onMessage.addListener", () => {
+		it("should register message handler via chrome.runtime.onMessage.addListener", async () => {
+			const initializeApp = await loadInitializeApp();
 			initializeApp();
 			expect(chrome.runtime.onMessage.addListener).toHaveBeenCalledWith(expect.any(Function));
+		});
+
+		describe("idempotency guard", () => {
+			it("should return the same AppServices instance on second call", async () => {
+				const initializeApp = await loadInitializeApp();
+				const first = initializeApp();
+				const second = initializeApp();
+				expect(second).toBe(first);
+			});
+
+			it("should register onMessage listener only once even if called twice", async () => {
+				const initializeApp = await loadInitializeApp();
+				initializeApp();
+				initializeApp();
+				expect(chrome.runtime.onMessage.addListener).toHaveBeenCalledTimes(1);
+			});
+
+			it("should create ChromeIdentityAdapter only once (verified via storage.onChanged.addListener count)", async () => {
+				const initializeApp = await loadInitializeApp();
+				initializeApp();
+				initializeApp();
+				expect(chrome.storage.onChanged.addListener).toHaveBeenCalledTimes(1);
+			});
+
+			it("should remain idempotent across multiple calls", async () => {
+				const initializeApp = await loadInitializeApp();
+				const first = initializeApp();
+				initializeApp();
+				const third = initializeApp();
+				expect(third).toBe(first);
+				expect(chrome.runtime.onMessage.addListener).toHaveBeenCalledTimes(1);
+				expect(chrome.storage.onChanged.addListener).toHaveBeenCalledTimes(1);
+			});
 		});
 	});
 });
