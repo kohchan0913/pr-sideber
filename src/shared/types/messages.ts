@@ -1,4 +1,4 @@
-import type { DeviceCodeResponse, PollResult } from "./auth";
+import type { DeviceCodeResponse, PollResult } from "../../domain/types/auth";
 
 export const MESSAGE_TYPES = [
 	"AUTH_LOGOUT",

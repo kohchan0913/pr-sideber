@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DeviceCodeResponse, PollResult } from "../../../domain/types/auth";
 import type { SendMessage } from "../../../shared/ports/message.port";
-import type { DeviceCodeResponse, PollResult } from "../../../shared/types/auth";
 import type { ResponseMessage } from "../../../shared/types/messages";
 import { createAuthUseCase } from "../../../sidepanel/usecase/auth.usecase";
 
@@ -187,5 +187,52 @@ describe("auth usecase", () => {
 
 			expect(result).toBe(false);
 		});
+	});
+});
+
+describe("auth.usecase の依存方向", () => {
+	it("DeviceCodeResponse, PollResult を domain/types/auth から直接 import していること", () => {
+		const files = import.meta.glob("../../../sidepanel/usecase/auth.usecase.ts", {
+			query: "?raw",
+			eager: true,
+		}) as Record<string, { default: string }>;
+
+		const matchedPaths = Object.keys(files);
+		expect(matchedPaths, "sidepanel/usecase/auth.usecase.ts が見つかりません").toHaveLength(1);
+
+		const content = Object.values(files)[0]?.default;
+		expect(content).toBeDefined();
+
+		expect(content).toMatch(
+			/import\s+[\s\S]*?\bDeviceCodeResponse\b[\s\S]*?from\s+["'].*domain\/types\/auth["']/,
+		);
+		expect(content).toMatch(
+			/import\s+[\s\S]*?\bPollResult\b[\s\S]*?from\s+["'].*domain\/types\/auth["']/,
+		);
+	});
+
+	it("shared/types/auth から DeviceCodeResponse, PollResult を import していないこと", () => {
+		const files = import.meta.glob("../../../sidepanel/usecase/auth.usecase.ts", {
+			query: "?raw",
+			eager: true,
+		}) as Record<string, { default: string }>;
+
+		expect(Object.keys(files), "sidepanel/usecase/auth.usecase.ts が見つかりません").toHaveLength(
+			1,
+		);
+
+		const content = Object.values(files)[0]?.default;
+		expect(content).toBeDefined();
+
+		// multiline import 文を抽出して禁止シンボルを検証
+		const sharedAuthImportPattern =
+			/import\s+(?:type\s+)?{([^}]*)}\s+from\s+["'].*shared\/types\/auth["']/g;
+		const matches = [...(content?.matchAll(sharedAuthImportPattern) ?? [])];
+
+		for (const match of matches) {
+			const importedSymbols = match[1];
+			expect(importedSymbols).not.toMatch(/\bDeviceCodeResponse\b/);
+			expect(importedSymbols).not.toMatch(/\bPollResult\b/);
+		}
 	});
 });

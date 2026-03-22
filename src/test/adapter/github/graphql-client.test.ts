@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GitHubGraphQLClient } from "../../../adapter/github/graphql-client";
 import type { GitHubApiPort } from "../../../domain/ports/github-api.port";
+import type { ReviewDecision, StatusState } from "../../../domain/types/github";
 import { GitHubApiError } from "../../../shared/types/errors";
-import type { ReviewDecision, StatusState } from "../../../shared/types/github";
 
 const GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
 const TEST_TOKEN = "gho_test_access_token_12345";
@@ -485,5 +485,58 @@ describe("GitHubGraphQLClient", () => {
 			expect(body.query).toContain("pageInfo");
 			expect(body.query).toContain("hasNextPage");
 		});
+	});
+});
+
+describe("graphql-client の依存方向", () => {
+	it("FetchPullRequestsResult, PullRequest, ReviewDecision, StatusState を domain/types/github から直接 import していること", () => {
+		const files = import.meta.glob("../../../adapter/github/graphql-client.ts", {
+			query: "?raw",
+			eager: true,
+		}) as Record<string, { default: string }>;
+
+		const matchedPaths = Object.keys(files);
+		expect(matchedPaths, "adapter/github/graphql-client.ts が見つかりません").toHaveLength(1);
+
+		const content = Object.values(files)[0]?.default;
+		expect(content).toBeDefined();
+
+		expect(content).toMatch(
+			/import\s+[\s\S]*?\bFetchPullRequestsResult\b[\s\S]*?from\s+["'].*domain\/types\/github["']/,
+		);
+		expect(content).toMatch(
+			/import\s+[\s\S]*?\bPullRequest\b[\s\S]*?from\s+["'].*domain\/types\/github["']/,
+		);
+		expect(content).toMatch(
+			/import\s+[\s\S]*?\bReviewDecision\b[\s\S]*?from\s+["'].*domain\/types\/github["']/,
+		);
+		expect(content).toMatch(
+			/import\s+[\s\S]*?\bStatusState\b[\s\S]*?from\s+["'].*domain\/types\/github["']/,
+		);
+	});
+
+	it("shared/types/github から FetchPullRequestsResult, PullRequest, ReviewDecision, StatusState を import していないこと", () => {
+		const files = import.meta.glob("../../../adapter/github/graphql-client.ts", {
+			query: "?raw",
+			eager: true,
+		}) as Record<string, { default: string }>;
+
+		expect(Object.keys(files), "adapter/github/graphql-client.ts が見つかりません").toHaveLength(1);
+
+		const content = Object.values(files)[0]?.default;
+		expect(content).toBeDefined();
+
+		// multiline import 文を抽出して禁止シンボルを検証
+		const sharedGithubImportPattern =
+			/import\s+(?:type\s+)?{([^}]*)}\s+from\s+["'].*shared\/types\/github["']/g;
+		const matches = [...(content?.matchAll(sharedGithubImportPattern) ?? [])];
+
+		for (const match of matches) {
+			const importedSymbols = match[1];
+			expect(importedSymbols).not.toMatch(/\bFetchPullRequestsResult\b/);
+			expect(importedSymbols).not.toMatch(/\bPullRequest\b/);
+			expect(importedSymbols).not.toMatch(/\bReviewDecision\b/);
+			expect(importedSymbols).not.toMatch(/\bStatusState\b/);
+		}
 	});
 });

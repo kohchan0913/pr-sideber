@@ -1,9 +1,62 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChromeIdentityAdapter } from "../../../adapter/chrome/identity.adapter";
 import type { StoragePort } from "../../../domain/ports/storage.port";
-import type { AuthToken, DeviceCodeResponse, OAuthConfig } from "../../../shared/types/auth";
+import type { AuthToken, DeviceCodeResponse } from "../../../domain/types/auth";
+import type { OAuthConfig } from "../../../shared/types/auth";
 import { AuthError, isAuthToken } from "../../../shared/types/auth";
 import { getChromeMock, resetChromeMock, setupChromeMock } from "../../mocks/chrome.mock";
+
+describe("identity.adapter の依存方向", () => {
+	it("AuthToken, DeviceCodeResponse, PollResult を domain/types/auth から直接 import していること", () => {
+		const files = import.meta.glob("../../../adapter/chrome/identity.adapter.ts", {
+			query: "?raw",
+			eager: true,
+		}) as Record<string, { default: string }>;
+
+		const matchedPaths = Object.keys(files);
+		expect(matchedPaths, "adapter/chrome/identity.adapter.ts が見つかりません").toHaveLength(1);
+
+		const content = Object.values(files)[0]?.default;
+		expect(content).toBeDefined();
+
+		// domain/types/auth から import していることを確認 (multiline import 対応)
+		expect(content).toMatch(
+			/import\s+[\s\S]*?\bAuthToken\b[\s\S]*?from\s+["'].*domain\/types\/auth["']/,
+		);
+		expect(content).toMatch(
+			/import\s+[\s\S]*?\bDeviceCodeResponse\b[\s\S]*?from\s+["'].*domain\/types\/auth["']/,
+		);
+		expect(content).toMatch(
+			/import\s+[\s\S]*?\bPollResult\b[\s\S]*?from\s+["'].*domain\/types\/auth["']/,
+		);
+	});
+
+	it("shared/types/auth から AuthToken, DeviceCodeResponse, PollResult を import していないこと", () => {
+		const files = import.meta.glob("../../../adapter/chrome/identity.adapter.ts", {
+			query: "?raw",
+			eager: true,
+		}) as Record<string, { default: string }>;
+
+		expect(Object.keys(files), "adapter/chrome/identity.adapter.ts が見つかりません").toHaveLength(
+			1,
+		);
+
+		const content = Object.values(files)[0]?.default;
+		expect(content).toBeDefined();
+
+		// multiline import 文を抽出して禁止シンボルを検証
+		const sharedAuthImportPattern =
+			/import\s+(?:type\s+)?{([^}]*)}\s+from\s+["'].*shared\/types\/auth["']/g;
+		const matches = [...(content?.matchAll(sharedAuthImportPattern) ?? [])];
+
+		for (const match of matches) {
+			const importedSymbols = match[1];
+			expect(importedSymbols).not.toMatch(/\bAuthToken\b/);
+			expect(importedSymbols).not.toMatch(/\bDeviceCodeResponse\b/);
+			expect(importedSymbols).not.toMatch(/\bPollResult\b/);
+		}
+	});
+});
 
 function createMockStorage(): StoragePort & {
 	get: ReturnType<typeof vi.fn>;

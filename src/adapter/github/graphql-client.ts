@@ -1,11 +1,11 @@
 import type { GitHubApiPort } from "../../domain/ports/github-api.port";
-import { GitHubApiError } from "../../shared/types/errors";
 import type {
 	FetchPullRequestsResult,
 	PullRequest,
 	ReviewDecision,
 	StatusState,
-} from "../../shared/types/github";
+} from "../../domain/types/github";
+import { GitHubApiError } from "../../shared/types/errors";
 
 const GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
 
