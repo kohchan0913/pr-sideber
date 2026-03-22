@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppServices } from "../../background/types";
 import { createMessageHandler } from "../../background/message-handler";
+import type { AppServices } from "../../background/types";
 import type { AuthPort } from "../../domain/ports/auth.port";
 import type { GitHubApiPort } from "../../domain/ports/github-api.port";
 import type { FetchRawPullRequestsResult } from "../../domain/types/github";

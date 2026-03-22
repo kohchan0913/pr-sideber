@@ -1,5 +1,5 @@
-import type { FetchRawPullRequestsResult } from "../../domain/types/github";
 import type { PrProcessorPort, ProcessedPrsResult } from "../../domain/ports/pr-processor.port";
+import type { FetchRawPullRequestsResult } from "../../domain/types/github";
 import type { SendMessage } from "../../shared/ports/message.port";
 
 export function createPrUseCase(sendMessage: SendMessage, prProcessor: PrProcessorPort) {
