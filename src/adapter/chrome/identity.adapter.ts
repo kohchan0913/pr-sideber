@@ -2,6 +2,7 @@ import type { AuthPort } from "../../domain/ports/auth.port";
 import type { StoragePort } from "../../domain/ports/storage.port";
 import type { AuthToken, DeviceCodeResponse, PollResult } from "../../domain/types/auth";
 import { AuthError, isAuthToken } from "../../shared/types/auth";
+import { NetworkError } from "../../shared/types/errors";
 import type { OAuthConfig } from "./oauth.config";
 
 const TOKEN_STORAGE_KEY = "github_auth_token";
@@ -15,6 +16,12 @@ const DEVICE_CODE_MAX_LENGTH = 256;
 
 /** error_description の最大長。過剰な文字列の注入を防ぐ */
 const ERROR_DESCRIPTION_MAX_LENGTH = 500;
+
+/** リフレッシュの最大試行回数 (一時的エラー時のリトライ) */
+const REFRESH_MAX_ATTEMPTS = 3;
+
+/** リトライ時の基本待機時間 (ms)。指数バックオフで 1s → 2s と増加する */
+const REFRESH_BASE_DELAY_MS = 1000;
 
 export class ChromeIdentityAdapter implements AuthPort {
 	private cachedAuthenticated: boolean | null = null;
@@ -154,15 +161,38 @@ export class ChromeIdentityAdapter implements AuthPort {
 		if (token === null) return null;
 
 		if (this.isTokenExpiredWithBuffer(token.expiresAt)) {
+			// refreshToken がなければリフレッシュ不可。まだ有効期限内ならトークンを返す
+			if (!token.refreshToken) {
+				if (this.isTokenStillValid(token.expiresAt)) {
+					return token;
+				}
+				await this.clearToken();
+				return null;
+			}
+
 			if (!this.refreshPromise) {
 				this.refreshPromise = this.performRefresh(token).finally(() => {
 					this.refreshPromise = null;
 				});
 			}
-			const refreshed = await this.refreshPromise;
-			if (refreshed !== null) return refreshed;
-			await this.clearToken();
-			return null;
+
+			try {
+				const refreshed = await this.refreshPromise;
+				if (refreshed !== null) return refreshed;
+				// 回復不能エラー (HTTP 4xx など) で null が返った場合
+				await this.clearToken();
+				return null;
+			} catch (error: unknown) {
+				if (error instanceof NetworkError) {
+					// 一時的なネットワーク障害: トークンがまだ有効期限内ならそのまま返す
+					if (this.isTokenStillValid(token.expiresAt)) {
+						return token;
+					}
+					await this.clearToken();
+					return null;
+				}
+				throw error;
+			}
 		}
 
 		return token;
@@ -212,45 +242,103 @@ export class ChromeIdentityAdapter implements AuthPort {
 		return this.refreshPromise;
 	}
 
+	/**
+	 * トークンリフレッシュを試行する。一時的エラー時はリトライする。
+	 * - 成功: 新しい AuthToken を返す
+	 * - 回復不能エラー (HTTP 4xx, バリデーション失敗): null を返す
+	 * - 一時的エラーが全リトライ失敗: NetworkError を throw
+	 */
 	private async performRefresh(token: AuthToken): Promise<AuthToken | null> {
 		if (!token.refreshToken) return null;
-		try {
-			const body = new URLSearchParams({
-				grant_type: "refresh_token",
-				client_id: this.config.clientId,
-				refresh_token: token.refreshToken,
-			});
 
-			const response = await fetch(this.config.tokenEndpoint, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/x-www-form-urlencoded",
-					Accept: "application/json",
-				},
-				body: body.toString(),
-				redirect: "error",
-			});
+		let lastError: unknown;
+		for (let attempt = 0; attempt < REFRESH_MAX_ATTEMPTS; attempt++) {
+			if (attempt > 0) {
+				const delayMs = REFRESH_BASE_DELAY_MS * 2 ** (attempt - 1);
+				await this.delay(delayMs);
+			}
+			try {
+				return await this.attemptRefreshRequest(token.refreshToken);
+			} catch (error: unknown) {
+				if (!this.isTransientError(error)) {
+					// 回復不能エラー (HTTP 4xx, バリデーション失敗) → リトライしない
+					return null;
+				}
+				lastError = error;
+			}
+		}
 
-			// HTTP エラー時は原因によらず null を返す。
-			// 呼び出し元の getToken() が clearToken() でフォールバックし再認証を促す。
-			// 将来的にリトライ戦略が必要な場合は、ここで 429/500 を区別する。
-			if (!response.ok) return null;
+		throw new NetworkError("Token refresh failed after retries", {
+			cause: lastError,
+		});
+	}
 
-			const data = (await response.json()) as Record<string, unknown>;
-			const newToken = this.validateTokenData(data);
-			await this.storage.set(TOKEN_STORAGE_KEY, newToken);
-			this.cachedAuthenticated = true;
-			this.cachedExpiresAt = newToken.expiresAt;
-			return newToken;
-		} catch {
+	/** 待機関数。テスト時は vi.useFakeTimers で制御する */
+	private delay(ms: number): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	/**
+	 * 1回分のリフレッシュリクエスト。
+	 * - 成功: AuthToken を返す
+	 * - HTTP 4xx: null を返す (回復不能)
+	 * - HTTP 5xx/429: NetworkError を throw (リトライ対象)
+	 * - fetch TypeError: そのまま throw (リトライ対象)
+	 */
+	private async attemptRefreshRequest(refreshToken: string): Promise<AuthToken | null> {
+		const body = new URLSearchParams({
+			grant_type: "refresh_token",
+			client_id: this.config.clientId,
+			refresh_token: refreshToken,
+		});
+
+		const response = await fetch(this.config.tokenEndpoint, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded",
+				Accept: "application/json",
+			},
+			body: body.toString(),
+			redirect: "error",
+		});
+
+		if (!response.ok) {
+			if (response.status >= 500 || response.status === 429) {
+				throw new NetworkError("Server error during token refresh");
+			}
+			// HTTP 4xx: refresh_token が無効などの回復不能エラー
 			return null;
 		}
+
+		const data = (await response.json()) as Record<string, unknown>;
+		const newToken = this.validateTokenData(data);
+		await this.storage.set(TOKEN_STORAGE_KEY, newToken);
+		this.cachedAuthenticated = true;
+		this.cachedExpiresAt = newToken.expiresAt;
+		return newToken;
+	}
+
+	/** 一時的 (リトライ可能) なエラーかどうかを判定する */
+	private isTransientError(error: unknown): boolean {
+		// fetch の TypeError (DNS 解決失敗、接続拒否など)
+		if (error instanceof TypeError) return true;
+		// performRefresh 内で throw した NetworkError (5xx/429)
+		if (error instanceof NetworkError) return true;
+		// CDN/プロキシがHTMLエラーページを返した場合の JSON パースエラー
+		if (error instanceof SyntaxError) return true;
+		return false;
 	}
 
 	/** expiresAt がありバッファ圏内なら期限切れと判定する */
 	private isTokenExpiredWithBuffer(expiresAt: number | undefined): boolean {
 		if (expiresAt === undefined) return false;
 		return Date.now() >= expiresAt - TOKEN_EXPIRY_BUFFER_MS;
+	}
+
+	/** バッファなしで有効期限内かどうかを判定する */
+	private isTokenStillValid(expiresAt: number | undefined): boolean {
+		if (expiresAt === undefined) return true;
+		return Date.now() < expiresAt;
 	}
 
 	private validateDeviceCodeData(data: Record<string, unknown>): DeviceCodeResponse {

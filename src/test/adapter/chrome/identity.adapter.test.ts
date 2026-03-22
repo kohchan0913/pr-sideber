@@ -4,6 +4,7 @@ import type { OAuthConfig } from "../../../adapter/chrome/oauth.config";
 import type { StoragePort } from "../../../domain/ports/storage.port";
 import type { AuthToken, DeviceCodeResponse } from "../../../domain/types/auth";
 import { AuthError, isAuthToken } from "../../../shared/types/auth";
+import { NetworkError } from "../../../shared/types/errors";
 import { getChromeMock, resetChromeMock, setupChromeMock } from "../../mocks/chrome.mock";
 
 describe("identity.adapter の依存方向", () => {
@@ -1087,14 +1088,22 @@ describe("ChromeIdentityAdapter — refreshAccessToken (Issue #57)", () => {
 		expect(result).toBeNull();
 	});
 
-	it("should return null when fetch rejects with network error", async () => {
+	it("should throw NetworkError when fetch rejects with network error", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
 		globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Network error"));
 
 		mockStorage.get.mockResolvedValue(MOCK_TOKEN_WITH_REFRESH);
 
-		const result = await adapter.refreshAccessToken();
+		const errorPromise = adapter.refreshAccessToken().catch((e: unknown) => e);
+		// リトライのバックオフ delay を進める (1s + 2s)
+		await vi.advanceTimersByTimeAsync(1000);
+		await vi.advanceTimersByTimeAsync(2000);
 
-		expect(result).toBeNull();
+		const error = await errorPromise;
+
+		expect(error).toBeInstanceOf(NetworkError);
 	});
 
 	it("should return null when no refreshToken exists on stored token", async () => {
@@ -1107,5 +1116,398 @@ describe("ChromeIdentityAdapter — refreshAccessToken (Issue #57)", () => {
 
 		expect(result).toBeNull();
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+});
+
+// ============================================================
+// Issue #107: ネットワークエラー時のトークン保護
+// ============================================================
+
+describe("ChromeIdentityAdapter — ネットワークエラー時のトークン保護 (Issue #107)", () => {
+	let adapter: ChromeIdentityAdapter;
+	let mockStorage: ReturnType<typeof createMockStorage>;
+	let originalFetch: typeof globalThis.fetch;
+
+	beforeEach(() => {
+		setupChromeMock();
+		mockStorage = createMockStorage();
+		mockStorage.set.mockResolvedValue(undefined);
+		mockStorage.remove.mockResolvedValue(undefined);
+		adapter = new ChromeIdentityAdapter(mockStorage, TEST_CONFIG);
+		originalFetch = globalThis.fetch;
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		resetChromeMock();
+		globalThis.fetch = originalFetch;
+	});
+
+	describe("getToken — ネットワークエラー時のトークン保護", () => {
+		it("ネットワークエラー(fetch TypeError)時、バッファ圏内だが有効期限内のトークンはそのまま返す", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			const now = Date.now();
+			// 残り2分: バッファ(5分)圏内だが、実際にはまだ有効
+			const bufferButValidToken: AuthToken = {
+				...MOCK_TOKEN_WITH_REFRESH,
+				expiresAt: now + 2 * 60 * 1000,
+			};
+			mockStorage.get.mockResolvedValue(bufferButValidToken);
+
+			// fetch が TypeError で reject → ネットワーク障害
+			globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+
+			const resultPromise = adapter.getToken();
+			// リトライのバックオフ delay を進める (1s + 2s)
+			await vi.advanceTimersByTimeAsync(1000);
+			await vi.advanceTimersByTimeAsync(2000);
+
+			const result = await resultPromise;
+
+			// トークンはまだ有効なので、そのまま返すべき
+			expect(result).not.toBeNull();
+			expect(result?.accessToken).toBe(bufferButValidToken.accessToken);
+			// clearToken が呼ばれないことを検証
+			expect(mockStorage.remove).not.toHaveBeenCalled();
+		});
+
+		it("ネットワークエラー時、実際に期限切れのトークンは clearToken して null を返す", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			const now = Date.now();
+			// 完全に期限切れ（過去の時間）
+			const expiredToken: AuthToken = {
+				...MOCK_TOKEN_WITH_REFRESH,
+				expiresAt: now - 1000,
+			};
+			mockStorage.get.mockResolvedValue(expiredToken);
+
+			globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+
+			const resultPromise = adapter.getToken();
+			// リトライのバックオフ delay を進める (1s + 2s)
+			await vi.advanceTimersByTimeAsync(1000);
+			await vi.advanceTimersByTimeAsync(2000);
+
+			const result = await resultPromise;
+
+			expect(result).toBeNull();
+			expect(mockStorage.remove).toHaveBeenCalledWith("github_auth_token");
+		});
+
+		it.each([
+			{ status: 500, label: "HTTP 5xx" },
+			{ status: 429, label: "HTTP 429" },
+		])("$label 時、バッファ圏内だが有効期限内のトークンはそのまま返す", async ({ status }) => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			const now = Date.now();
+			const bufferButValidToken: AuthToken = {
+				...MOCK_TOKEN_WITH_REFRESH,
+				expiresAt: now + 2 * 60 * 1000,
+			};
+			mockStorage.get.mockResolvedValue(bufferButValidToken);
+
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: false,
+				status,
+			});
+
+			const resultPromise = adapter.getToken();
+			// リトライのバックオフ delay を進める (1s + 2s)
+			await vi.advanceTimersByTimeAsync(1000);
+			await vi.advanceTimersByTimeAsync(2000);
+
+			const result = await resultPromise;
+
+			expect(result).not.toBeNull();
+			expect(result?.accessToken).toBe(bufferButValidToken.accessToken);
+		});
+
+		it("HTTP 400 時 (refresh_token 無効)、clearToken して null を返す", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			const now = Date.now();
+			const bufferZoneToken: AuthToken = {
+				...MOCK_TOKEN_WITH_REFRESH,
+				expiresAt: now + 2 * 60 * 1000,
+			};
+			mockStorage.get.mockResolvedValue(bufferZoneToken);
+
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: false,
+				status: 400,
+			});
+
+			const result = await adapter.getToken();
+
+			expect(result).toBeNull();
+			expect(mockStorage.remove).toHaveBeenCalledWith("github_auth_token");
+		});
+
+		it("refreshToken なし + バッファ圏内 + 有効期限内 → トークンを返す", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			const now = Date.now();
+			// refreshToken なしでバッファ圏内だが実際はまだ有効
+			const noRefreshBufferToken: AuthToken = {
+				accessToken: "gho_no_refresh",
+				tokenType: "bearer",
+				scope: "repo",
+				expiresAt: now + 2 * 60 * 1000,
+				// refreshToken なし
+			};
+			mockStorage.get.mockResolvedValue(noRefreshBufferToken);
+
+			const result = await adapter.getToken();
+
+			// refreshToken がないので refresh できないが、まだ有効なのでトークンを返すべき
+			expect(result).not.toBeNull();
+			expect(result?.accessToken).toBe("gho_no_refresh");
+		});
+	});
+
+	describe("performRefresh — リトライ", () => {
+		it("1回目ネットワークエラー、2回目成功 → トークンを返す", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			mockStorage.get.mockResolvedValue(MOCK_TOKEN_WITH_REFRESH);
+
+			const fetchMock = vi
+				.fn()
+				// 1回目: ネットワークエラー
+				.mockRejectedValueOnce(new TypeError("Failed to fetch"))
+				// 2回目: 成功
+				.mockResolvedValueOnce({
+					ok: true,
+					json: async () => ({
+						access_token: "gho_retry_success",
+						token_type: "bearer",
+						scope: "repo",
+						expires_in: 3600,
+						refresh_token: "ghr_retry_new",
+					}),
+				});
+			globalThis.fetch = fetchMock;
+
+			const resultPromise = adapter.refreshAccessToken();
+			// 1回目失敗後のバックオフ (1s) を進める
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const result = await resultPromise;
+
+			expect(result).not.toBeNull();
+			expect(result?.accessToken).toBe("gho_retry_success");
+		});
+
+		it("3回全失敗 → NetworkError を throw", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			mockStorage.get.mockResolvedValue(MOCK_TOKEN_WITH_REFRESH);
+
+			globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+
+			const errorPromise = adapter.refreshAccessToken().catch((e: unknown) => e);
+			// リトライのバックオフ delay を進める (1s + 2s)
+			await vi.advanceTimersByTimeAsync(1000);
+			await vi.advanceTimersByTimeAsync(2000);
+
+			const error = await errorPromise;
+
+			expect(error).toBeInstanceOf(NetworkError);
+		});
+
+		it("429 レスポンスに対して即座にリトライしない (バックオフが入る)", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			mockStorage.get.mockResolvedValue(MOCK_TOKEN_WITH_REFRESH);
+
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: false,
+				status: 429,
+			});
+
+			const errorPromise = adapter.refreshAccessToken().catch((e: unknown) => e);
+
+			// 即座に2回目が呼ばれていないことを確認
+			await vi.advanceTimersByTimeAsync(0);
+			expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+			// 500ms 経過: まだ2回目は呼ばれない (バックオフ 1s)
+			await vi.advanceTimersByTimeAsync(500);
+			expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+			// 残りのタイマーを進めて完了させる
+			await vi.advanceTimersByTimeAsync(500);
+			await vi.advanceTimersByTimeAsync(2000);
+
+			await errorPromise;
+		});
+
+		it("リトライ間に指数バックオフが適用される (1s → 2s)", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			mockStorage.get.mockResolvedValue(MOCK_TOKEN_WITH_REFRESH);
+
+			globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+
+			const errorPromise = adapter.refreshAccessToken().catch((e: unknown) => e);
+
+			// 初回リトライ前: fetch は1回呼ばれている
+			await vi.advanceTimersByTimeAsync(0);
+			expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+			// 1秒経過: 2回目の試行が実行される
+			await vi.advanceTimersByTimeAsync(1000);
+			expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+
+			// さらに2秒経過: 3回目の試行が実行される
+			await vi.advanceTimersByTimeAsync(2000);
+			expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+
+			await errorPromise;
+		});
+
+		it("1回目 SyntaxError (JSON パースエラー)、2回目成功 → トークンを返す", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			mockStorage.get.mockResolvedValue(MOCK_TOKEN_WITH_REFRESH);
+
+			const fetchMock = vi
+				.fn()
+				// 1回目: CDN がHTMLを返し JSON パースに失敗
+				.mockResolvedValueOnce({
+					ok: true,
+					json: async () => {
+						throw new SyntaxError("Unexpected token '<' at position 0");
+					},
+				})
+				// 2回目: 成功
+				.mockResolvedValueOnce({
+					ok: true,
+					json: async () => ({
+						access_token: "gho_syntax_retry_success",
+						token_type: "bearer",
+						scope: "repo",
+						expires_in: 3600,
+						refresh_token: "ghr_syntax_retry_new",
+					}),
+				});
+			globalThis.fetch = fetchMock;
+
+			const resultPromise = adapter.refreshAccessToken();
+			// 1回目失敗後のバックオフ (1s) を進める
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const result = await resultPromise;
+
+			expect(result).not.toBeNull();
+			expect(result?.accessToken).toBe("gho_syntax_retry_success");
+			expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+		});
+
+		it("3回全て SyntaxError → NetworkError を throw", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			mockStorage.get.mockResolvedValue(MOCK_TOKEN_WITH_REFRESH);
+
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => {
+					throw new SyntaxError("Unexpected token '<' at position 0");
+				},
+			});
+
+			const errorPromise = adapter.refreshAccessToken().catch((e: unknown) => e);
+			// リトライのバックオフ delay を進める (1s + 2s)
+			await vi.advanceTimersByTimeAsync(1000);
+			await vi.advanceTimersByTimeAsync(2000);
+
+			const error = await errorPromise;
+
+			expect(error).toBeInstanceOf(NetworkError);
+			expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+		});
+	});
+
+	describe("getToken — 並行呼び出し排他制御", () => {
+		it("getToken を同時に2回呼んだとき、fetch が1回しか呼ばれない", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			const now = Date.now();
+			const bufferZoneToken: AuthToken = {
+				...MOCK_TOKEN_WITH_REFRESH,
+				expiresAt: now + 2 * 60 * 1000, // バッファ圏内 → リフレッシュ発動
+			};
+			mockStorage.get.mockResolvedValue(bufferZoneToken);
+
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({
+					access_token: "gho_concurrent_result",
+					token_type: "bearer",
+					scope: "repo",
+					expires_in: 3600,
+					refresh_token: "ghr_concurrent_new",
+				}),
+			});
+
+			// 同時に2回呼ぶ
+			const promise1 = adapter.getToken();
+			const promise2 = adapter.getToken();
+
+			const [result1, result2] = await Promise.all([promise1, promise2]);
+
+			// fetch は1回しか呼ばれない (排他制御: refreshPromise の共有)
+			expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+			// 両方同じ結果を返す
+			expect(result1?.accessToken).toBe("gho_concurrent_result");
+			expect(result2?.accessToken).toBe("gho_concurrent_result");
+		});
+	});
+
+	describe("performRefresh — バリデーション失敗", () => {
+		it("refresh レスポンスの access_token が空の場合、null を返す (リトライされない)", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			const now = Date.now();
+			const bufferZoneToken: AuthToken = {
+				...MOCK_TOKEN_WITH_REFRESH,
+				expiresAt: now + 2 * 60 * 1000,
+			};
+			mockStorage.get.mockResolvedValue(bufferZoneToken);
+
+			// access_token が空文字 → validateTokenData で AuthError throw → 回復不能
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({
+					access_token: "",
+					token_type: "bearer",
+					scope: "repo",
+				}),
+			});
+
+			const result = await adapter.getToken();
+
+			// バリデーション失敗は回復不能エラーとして null → clearToken
+			expect(result).toBeNull();
+			// リトライされない: fetch は1回のみ
+			expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+			expect(mockStorage.remove).toHaveBeenCalledWith("github_auth_token");
+		});
 	});
 });
