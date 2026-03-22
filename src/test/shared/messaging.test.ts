@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setupChromeMock, resetChromeMock, getChromeMock } from "../mocks/chrome.mock";
+import { getChromeMock, resetChromeMock, setupChromeMock } from "../mocks/chrome.mock";
 
 describe("sendMessage", () => {
 	beforeEach(() => {

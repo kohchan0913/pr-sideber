@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRequestMessage, MESSAGE_TYPES } from "../../../shared/types/messages";
+import { MESSAGE_TYPES, isRequestMessage } from "../../../shared/types/messages";
 
 describe("messages", () => {
 	describe("MESSAGE_TYPES", () => {
