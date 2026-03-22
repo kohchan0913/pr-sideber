@@ -7,11 +7,7 @@ export type OAuthConfig = {
 	readonly scopes: readonly string[];
 };
 
-export type AuthToken = {
-	readonly accessToken: string;
-	readonly tokenType: string;
-	readonly scope: string;
-};
+export type { AuthToken } from "../../domain/types/auth";
 
 export type AuthErrorCode =
 	| "authorization_failed"
