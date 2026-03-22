@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { PullRequest } from "../../domain/types/github";
+	import type { PrItemDto } from "../../domain/ports/pr-processor.port";
 	import { formatRelativeTime } from "../../shared/utils/time";
 	import { safeUrl } from "../../shared/utils/url";
 
 	type Props = {
-		pr: PullRequest;
+		pr: PrItemDto;
 	};
 
 	const { pr }: Props = $props();
@@ -15,7 +15,7 @@
 		#{pr.number} {pr.title}
 	</a>
 	<div class="pr-meta">
-		<span class="pr-repo">{pr.repository.nameWithOwner}</span>
+		<span class="pr-repo">{pr.repository}</span>
 		<span class="pr-updated">{formatRelativeTime(pr.updatedAt)}</span>
 	</div>
 </div>

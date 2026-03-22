@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { PullRequest } from "../../domain/types/github";
+	import type { PrItemDto } from "../../domain/ports/pr-processor.port";
 	import PrItem from "./PrItem.svelte";
 
 	type Props = {
 		title: string;
-		items: readonly PullRequest[];
+		items: readonly PrItemDto[];
 		isOpen?: boolean;
 	};
 

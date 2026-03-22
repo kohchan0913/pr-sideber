@@ -1,19 +1,19 @@
 <script lang="ts">
 	import { untrack } from "svelte";
-	import type { FetchPullRequestsResult } from "../../domain/types/github";
+	import type { ProcessedPrsResult } from "../../domain/ports/pr-processor.port";
 	import LogoutButton from "./LogoutButton.svelte";
 	import PrSection from "./PrSection.svelte";
 
 	type Props = {
 		onLogout: () => Promise<void>;
-		fetchPrs: () => Promise<FetchPullRequestsResult>;
+		fetchPrs: () => Promise<ProcessedPrsResult & { hasMore: boolean }>;
 	};
 
 	const { onLogout, fetchPrs }: Props = $props();
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let data = $state<FetchPullRequestsResult | null>(null);
+	let data = $state<(ProcessedPrsResult & { hasMore: boolean }) | null>(null);
 
 	async function loadPrs(): Promise<void> {
 		loading = true;
@@ -69,8 +69,8 @@
 			<button class="retry-button" onclick={loadPrs}>再試行</button>
 		</div>
 	{:else if data}
-		<PrSection title="My PRs" items={data.myPrs} />
-		<PrSection title="Review Requests" items={data.reviewRequested} />
+		<PrSection title="My PRs" items={data.myPrs.items} />
+		<PrSection title="Review Requests" items={data.reviewRequests.items} />
 	{/if}
 </main>
 

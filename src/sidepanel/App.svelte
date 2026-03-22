@@ -2,8 +2,8 @@
 	import { untrack } from "svelte";
 	import LoginScreen from "./components/LoginScreen.svelte";
 	import MainScreen from "./components/MainScreen.svelte";
-	import type { DeviceFlowState, createAuthUseCase } from "./usecase/auth.usecase.js";
-	import type { createPrUseCase } from "./usecase/pr.usecase.js";
+	import type { DeviceFlowState, createAuthUseCase } from "../shared/usecase/auth.usecase.js";
+	import type { createPrUseCase } from "../shared/usecase/pr.usecase.js";
 
 	type Props = {
 		authUseCase: ReturnType<typeof createAuthUseCase>;
@@ -73,7 +73,7 @@
 {#if loading}
 	<p>Loading...</p>
 {:else if authenticated}
-	<MainScreen onLogout={handleLogout} fetchPrs={prUseCase.fetchPrs} />
+	<MainScreen onLogout={handleLogout} fetchPrs={() => prUseCase.fetchPrs("@me")} />
 {:else}
 	<LoginScreen
 		onStartDeviceFlow={handleStartDeviceFlow}
