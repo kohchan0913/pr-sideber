@@ -17,7 +17,11 @@ paths:
   ↓
 [Phase 2] 計画 (planner agent)
   ↓
-[Phase 3] 実装 (implementer agent)
+[Phase 3a] テスト作成 (implementer agent — RED フェーズのみ)
+  ↓
+[Phase 3b] テストレビュー (quality-reviewer — テスト設計の妥当性検証)
+  ↓
+[Phase 3c] 実装 (implementer agent — GREEN → REFACTOR)
   ↓
 [Phase 4] レビュー (4 reviewer agents 並列)
   ↓
@@ -43,9 +47,18 @@ IMPORTANT: メインコンテキストは実装しない。以下に専念する
 - 計画の粒度が十分か
 - テスト計画がカバレッジ目標を満たせるか
 
-### Phase 3 (実装) 後
+### Phase 3a (テスト作成) 後
+- テストが網羅的に書かれているか (エッジケース含む)
+- テストが全て RED (失敗) 状態であるか
+- プロダクションコードが含まれていないか
+
+### Phase 3b (テストレビュー) 後
+- レビュー指摘がテスト設計に反映されたか
+- テストケースの漏れが補完されたか
+
+### Phase 3c (実装) 後
 - ビルドが通るか (`pnpm build` + `cargo clippy`)
-- テストが書かれているか (TDD 遵守)
+- テストが全て GREEN (通過) 状態であるか
 - サイレントフォールバックがないか
 - 計画からの逸脱がないか
 

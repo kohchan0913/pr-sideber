@@ -29,13 +29,37 @@ gh issue view $ISSUE_NUMBER
 
 問題があれば差し戻す。2回で解決しなければユーザーに報告。
 
-## Phase 3: 実装
+## Phase 3a: テスト作成 (RED)
 
-IMPORTANT: `/tdd` スキルを発火して実装する。planner の計画を引数として渡す。
-`/tdd` スキルが TDD サイクル (RED→GREEN→REFACTOR) を遵守した実装を行う。
+IMPORTANT: `implementer` agent を起動し、**テストのみ** を書かせる。プロダクションコードは書かない。
+planner の計画とエッジケースを渡し、「RED フェーズのみ実行。テストを書いて失敗を確認するところまで」と明示する。
 
 **サニティチェック:**
-- テストが書かれているか (TDD 遵守)
+- テストが書かれているか
+- テストが全て失敗 (RED) 状態であるか
+- プロダクションコードが含まれていないか
+
+## Phase 3b: テストレビュー
+
+IMPORTANT: `quality-reviewer` agent を起動し、Phase 3a で書かれたテストコードのレビューを行う。
+
+レビュー観点:
+- テストケースが計画の要件を網羅しているか
+- エッジケース (0件、null、境界値) が考慮されているか
+- テストの可読性・保守性は十分か
+- 過不足ないアサーションか
+
+指摘があった場合: `implementer` agent にテストの修正を指示する (最大2回)。
+テストレビュー PASS 後、Phase 3c に進む。
+
+## Phase 3c: 実装 (GREEN → REFACTOR)
+
+IMPORTANT: `implementer` agent を起動し、Phase 3a で書いたテストを通す最小実装 + リファクタを行う。
+「GREEN → REFACTOR フェーズを実行。既存のテストを全て通す最小実装を書き、その後リファクタする」と明示する。
+
+**サニティチェック:**
+- ビルドが通るか (`pnpm build` + `cargo clippy`)
+- テストが全て通過 (GREEN) しているか
 - サイレントフォールバックがないか
 - 計画からの逸脱がないか
 
@@ -61,13 +85,14 @@ IMPORTANT: レビュー指摘に基づいてコードを修正した場合、修
 
 ## Phase 6: PR 作成 & 報告
 
-IMPORTANT: PR 作成前に `/verify` スキルを発火して6フェーズ検証を通す。FAIL があれば修正してから再実行。
+IMPORTANT: PR 作成前に `/verify` スキルを発火して検証を通す。FAIL があれば修正してから再実行。
 
 検証 PASS 後:
 1. コミット & プッシュする
 2. **[reference/pr-creation.md](reference/pr-creation.md) を参照して PR を作成する。ユーザー確認を待たずに自律的に作成すること。**
-3. PR にレビューサマリーをコメントする
-4. ユーザーに PR URL を報告する
+3. IMPORTANT: PR ボディを作成したら、送信前に必ず「PR ボディ必須セクションチェック」(pr-creation.md 記載) を通す。チェックに通らなければ PR を作成しない
+4. PR にレビューサマリーをコメントする
+5. ユーザーに PR URL を報告する
 
 ## 異常時
 
