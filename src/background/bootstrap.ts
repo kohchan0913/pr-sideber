@@ -5,8 +5,9 @@ import type { AuthPort } from "../domain/ports/auth.port";
 import type { GitHubApiPort } from "../domain/ports/github-api.port";
 import { createOAuthConfig } from "../shared/config/oauth.config";
 import { GitHubApiError } from "../shared/types/errors";
+import { createMessageHandler } from "./message-handler";
 
-type AppServices = {
+export type AppServices = {
 	readonly auth: AuthPort;
 	readonly githubApi: GitHubApiPort;
 };
@@ -25,5 +26,8 @@ export function initializeApp(): AppServices {
 		}
 		return token.accessToken;
 	});
+	const handler = createMessageHandler({ auth, githubApi });
+	chrome.runtime.onMessage.addListener(handler);
+
 	return { auth, githubApi };
 }

@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AppServices } from "../../background/bootstrap";
 import { createMessageHandler } from "../../background/message-handler";
 import type { AuthPort } from "../../domain/ports/auth.port";
-import type { AuthToken } from "../../shared/types/auth";
-import { AuthError } from "../../shared/types/auth";
-import type { AuthMessage, AuthResponse } from "../../shared/types/messages";
+import type { MessageType, ResponseMessage } from "../../shared/types/messages";
 import { getChromeMock, resetChromeMock, setupChromeMock } from "../mocks/chrome.mock";
 
 function createMockAuth(): {
@@ -17,177 +16,179 @@ function createMockAuth(): {
 	};
 }
 
+const TRUSTED_EXTENSION_ID = "test-extension-id";
+
+function createTrustedSender(): chrome.runtime.MessageSender {
+	return { id: TRUSTED_EXTENSION_ID } as chrome.runtime.MessageSender;
+}
+
+function createUntrustedSender(): chrome.runtime.MessageSender {
+	return { id: "malicious-extension-id" } as chrome.runtime.MessageSender;
+}
+
 describe("createMessageHandler", () => {
 	let mockAuth: ReturnType<typeof createMockAuth>;
+	let services: AppServices;
+	let handler: ReturnType<typeof createMessageHandler>;
 
 	beforeEach(() => {
 		setupChromeMock();
 		mockAuth = createMockAuth();
+		services = { auth: mockAuth } as unknown as AppServices;
+		handler = createMessageHandler(services);
 	});
 
 	afterEach(() => {
 		resetChromeMock();
+		vi.restoreAllMocks();
 	});
 
-	it("should register a listener on chrome.runtime.onMessage", () => {
-		createMessageHandler(mockAuth);
-
-		const mock = getChromeMock();
-		expect(mock.runtime.onMessage.addListener).toHaveBeenCalledOnce();
-		expect(mock.runtime.onMessage.addListener).toHaveBeenCalledWith(expect.any(Function));
+	it("should return true for valid async message from trusted sender", () => {
+		const sendResponse = vi.fn();
+		const result = handler({ type: "AUTH_LOGIN" }, createTrustedSender(), sendResponse);
+		expect(result).toBe(true);
 	});
 
-	describe("AUTH_LOGIN", () => {
-		it("should return AUTH_SUCCESS when authorize succeeds", async () => {
-			const token: AuthToken = { accessToken: "tok_123", tokenType: "bearer", scope: "repo" };
-			mockAuth.authorize.mockResolvedValue(token);
-
-			createMessageHandler(mockAuth);
-			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
-
-			const sendResponse = vi.fn();
-			const message: AuthMessage = { type: "AUTH_LOGIN" };
-			const result = listener(message, { id: getChromeMock().runtime.id }, sendResponse);
-
-			expect(result).toBe(true);
-			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
-
-			const response: AuthResponse = sendResponse.mock.calls[0][0];
-			expect(response).toEqual({ type: "AUTH_SUCCESS", authenticated: true });
-		});
-
-		it("should return AUTH_FAILURE when authorize throws", async () => {
-			mockAuth.authorize.mockRejectedValue(
-				new AuthError("authorization_failed", "User denied access"),
-			);
-
-			createMessageHandler(mockAuth);
-			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
-
-			const sendResponse = vi.fn();
-			const message: AuthMessage = { type: "AUTH_LOGIN" };
-			listener(message, { id: getChromeMock().runtime.id }, sendResponse);
-
-			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
-
-			const response: AuthResponse = sendResponse.mock.calls[0][0];
-			expect(response).toEqual({ type: "AUTH_FAILURE", error: "User denied access" });
+	it("should return false and FORBIDDEN for untrusted sender", () => {
+		const sendResponse = vi.fn();
+		const result = handler({ type: "AUTH_LOGIN" }, createUntrustedSender(), sendResponse);
+		expect(result).toBe(false);
+		expect(sendResponse).toHaveBeenCalledWith({
+			ok: false,
+			error: { code: "FORBIDDEN", message: "Untrusted sender" },
 		});
 	});
 
-	describe("AUTH_LOGOUT", () => {
-		it("should call clearToken and return AUTH_SUCCESS with authenticated: false", async () => {
-			mockAuth.clearToken.mockResolvedValue(undefined);
+	it("should return false for unknown message type without calling sendResponse", () => {
+		const sendResponse = vi.fn();
+		const result = handler({ type: "INVALID_TYPE" }, createTrustedSender(), sendResponse);
+		expect(result).toBe(false);
+		expect(sendResponse).not.toHaveBeenCalled();
+	});
 
-			createMessageHandler(mockAuth);
-			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
+	it("should return false for non-object message without calling sendResponse", () => {
+		const sendResponse = vi.fn();
+		const result = handler("not-an-object", createTrustedSender(), sendResponse);
+		expect(result).toBe(false);
+		expect(sendResponse).not.toHaveBeenCalled();
+	});
 
-			const sendResponse = vi.fn();
-			const message: AuthMessage = { type: "AUTH_LOGOUT" };
-			listener(message, { id: getChromeMock().runtime.id }, sendResponse);
+	it("AUTH_LOGIN: should call auth.authorize() and respond without token", async () => {
+		const mockToken = { accessToken: "test-token", tokenType: "bearer", scope: "repo" };
+		mockAuth.authorize.mockResolvedValue(mockToken);
+		const sendResponse = vi.fn();
 
-			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+		handler({ type: "AUTH_LOGIN" }, createTrustedSender(), sendResponse);
 
-			expect(mockAuth.clearToken).toHaveBeenCalledOnce();
-			const response: AuthResponse = sendResponse.mock.calls[0][0];
-			expect(response).toEqual({ type: "AUTH_SUCCESS", authenticated: false });
+		await vi.waitFor(() => {
+			expect(sendResponse).toHaveBeenCalled();
 		});
 
-		it("should return AUTH_FAILURE when clearToken throws", async () => {
-			mockAuth.clearToken.mockRejectedValue(new Error("Storage error"));
+		expect(mockAuth.authorize).toHaveBeenCalled();
+		const response = sendResponse.mock.calls[0][0] as ResponseMessage<"AUTH_LOGIN">;
+		expect(response).toEqual({ ok: true, data: undefined });
+	});
 
-			createMessageHandler(mockAuth);
-			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
+	it("AUTH_LOGIN: response should not contain token", async () => {
+		const mockToken = { accessToken: "secret-token", tokenType: "bearer", scope: "repo" };
+		mockAuth.authorize.mockResolvedValue(mockToken);
+		const sendResponse = vi.fn();
 
-			const sendResponse = vi.fn();
-			const message: AuthMessage = { type: "AUTH_LOGOUT" };
-			listener(message, { id: getChromeMock().runtime.id }, sendResponse);
+		handler({ type: "AUTH_LOGIN" }, createTrustedSender(), sendResponse);
 
-			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+		await vi.waitFor(() => {
+			expect(sendResponse).toHaveBeenCalled();
+		});
 
-			const response: AuthResponse = sendResponse.mock.calls[0][0];
-			expect(response).toEqual({ type: "AUTH_FAILURE", error: "Storage error" });
+		const response = sendResponse.mock.calls[0][0];
+		expect(response).not.toHaveProperty("data.token");
+		expect(JSON.stringify(response)).not.toContain("secret-token");
+	});
+
+	it("AUTH_LOGOUT: should call auth.clearToken() and respond with success", async () => {
+		mockAuth.clearToken.mockResolvedValue(undefined);
+		const sendResponse = vi.fn();
+
+		handler({ type: "AUTH_LOGOUT" }, createTrustedSender(), sendResponse);
+
+		await vi.waitFor(() => {
+			expect(sendResponse).toHaveBeenCalled();
+		});
+
+		expect(mockAuth.clearToken).toHaveBeenCalled();
+		const response = sendResponse.mock.calls[0][0] as ResponseMessage<"AUTH_LOGOUT">;
+		expect(response).toEqual({ ok: true, data: undefined });
+	});
+
+	it("AUTH_STATUS: should call auth.isAuthenticated() and respond with status", async () => {
+		mockAuth.isAuthenticated.mockResolvedValue(true);
+		const sendResponse = vi.fn();
+
+		handler({ type: "AUTH_STATUS" }, createTrustedSender(), sendResponse);
+
+		await vi.waitFor(() => {
+			expect(sendResponse).toHaveBeenCalled();
+		});
+
+		expect(mockAuth.isAuthenticated).toHaveBeenCalled();
+		const response = sendResponse.mock.calls[0][0] as ResponseMessage<"AUTH_STATUS">;
+		expect(response).toEqual({ ok: true, data: { isAuthenticated: true } });
+	});
+
+	it("should respond with type-specific error code when auth.authorize() throws", async () => {
+		mockAuth.authorize.mockRejectedValue(new Error("Authorization failed"));
+		const sendResponse = vi.fn();
+
+		handler({ type: "AUTH_LOGIN" }, createTrustedSender(), sendResponse);
+
+		await vi.waitFor(() => {
+			expect(sendResponse).toHaveBeenCalled();
+		});
+
+		const response = sendResponse.mock.calls[0][0] as ResponseMessage<"AUTH_LOGIN">;
+		expect(response).toEqual({
+			ok: false,
+			error: { code: "AUTH_LOGIN_ERROR", message: "Login failed" },
 		});
 	});
 
-	describe("AUTH_CHECK", () => {
-		it("should return AUTH_STATUS with authenticated: true when authenticated", async () => {
-			mockAuth.isAuthenticated.mockResolvedValue(true);
+	it("should not leak internal error details in error response", async () => {
+		mockAuth.authorize.mockRejectedValue(
+			new Error(
+				"OAuth token exchange failed: invalid_grant at https://github.com/login/oauth/access_token",
+			),
+		);
+		const sendResponse = vi.fn();
 
-			createMessageHandler(mockAuth);
-			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
+		handler({ type: "AUTH_LOGIN" }, createTrustedSender(), sendResponse);
 
-			const sendResponse = vi.fn();
-			const message: AuthMessage = { type: "AUTH_CHECK" };
-			listener(message, { id: getChromeMock().runtime.id }, sendResponse);
-
-			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
-
-			const response: AuthResponse = sendResponse.mock.calls[0][0];
-			expect(response).toEqual({ type: "AUTH_STATUS", authenticated: true });
+		await vi.waitFor(() => {
+			expect(sendResponse).toHaveBeenCalled();
 		});
 
-		it("should return AUTH_STATUS with authenticated: false when isAuthenticated throws", async () => {
-			mockAuth.isAuthenticated.mockRejectedValue(new Error("Storage corrupted"));
-
-			createMessageHandler(mockAuth);
-			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
-
-			const sendResponse = vi.fn();
-			const message: AuthMessage = { type: "AUTH_CHECK" };
-			listener(message, { id: getChromeMock().runtime.id }, sendResponse);
-
-			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
-
-			const response: AuthResponse = sendResponse.mock.calls[0][0];
-			expect(response).toEqual({ type: "AUTH_STATUS", authenticated: false });
-		});
-
-		it("should return AUTH_STATUS with authenticated: false when not authenticated", async () => {
-			mockAuth.isAuthenticated.mockResolvedValue(false);
-
-			createMessageHandler(mockAuth);
-			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
-
-			const sendResponse = vi.fn();
-			const message: AuthMessage = { type: "AUTH_CHECK" };
-			listener(message, { id: getChromeMock().runtime.id }, sendResponse);
-
-			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
-
-			const response: AuthResponse = sendResponse.mock.calls[0][0];
-			expect(response).toEqual({ type: "AUTH_STATUS", authenticated: false });
-		});
+		const response = sendResponse.mock.calls[0][0] as ResponseMessage<"AUTH_LOGIN">;
+		expect(response.ok).toBe(false);
+		if (!response.ok) {
+			expect(response.error.message).toBe("Login failed");
+			expect(response.error.message).not.toContain("OAuth");
+			expect(response.error.message).not.toContain("github.com");
+		}
 	});
 
-	describe("sender validation", () => {
-		it("should return undefined when sender.id does not match chrome.runtime.id", () => {
-			createMessageHandler(mockAuth);
-			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
+	it("should use AUTH_LOGOUT_ERROR code for logout failures", async () => {
+		mockAuth.clearToken.mockRejectedValue(new Error("Storage error"));
+		const sendResponse = vi.fn();
 
-			const sendResponse = vi.fn();
-			const message: AuthMessage = { type: "AUTH_LOGIN" };
-			const result = listener(message, { id: "malicious-extension-id" }, sendResponse);
+		handler({ type: "AUTH_LOGOUT" }, createTrustedSender(), sendResponse);
 
-			expect(result).toBeUndefined();
-			expect(sendResponse).not.toHaveBeenCalled();
+		await vi.waitFor(() => {
+			expect(sendResponse).toHaveBeenCalled();
 		});
-	});
 
-	describe("unknown message", () => {
-		it("should return undefined for unknown message types", () => {
-			createMessageHandler(mockAuth);
-			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
-
-			const sendResponse = vi.fn();
-			const result = listener(
-				{ type: "UNKNOWN_TYPE" },
-				{ id: getChromeMock().runtime.id },
-				sendResponse,
-			);
-
-			expect(result).toBeUndefined();
-			expect(sendResponse).not.toHaveBeenCalled();
+		const response = sendResponse.mock.calls[0][0] as ResponseMessage<"AUTH_LOGOUT">;
+		expect(response).toEqual({
+			ok: false,
+			error: { code: "AUTH_LOGOUT_ERROR", message: "Logout failed" },
 		});
 	});
 });

@@ -1,8 +1,6 @@
 import { initializeApp } from "./bootstrap";
-import { createMessageHandler } from "./message-handler";
 
-const services = initializeApp();
-createMessageHandler(services.auth);
+initializeApp();
 
 chrome.sidePanel
 	.setPanelBehavior({ openPanelOnActionClick: true })

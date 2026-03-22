@@ -1,3 +1,5 @@
-import type { AuthMessage, AuthResponse } from "../types/messages";
+import type { MessageType, RequestMap, ResponseMessage } from "../types/messages";
 
-export type SendMessage = (message: AuthMessage) => Promise<AuthResponse | undefined>;
+export type SendMessage = <T extends MessageType>(
+	...args: RequestMap[T] extends undefined ? [type: T] : [type: T, payload: RequestMap[T]]
+) => Promise<ResponseMessage<T>>;
