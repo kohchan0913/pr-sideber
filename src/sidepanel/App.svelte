@@ -1,22 +1,46 @@
 <script lang="ts">
-	import { loadGreeting } from "../wasm/index.js";
+	import { untrack } from "svelte";
+	import LoginScreen from "./components/LoginScreen.svelte";
+	import MainScreen from "./components/MainScreen.svelte";
+	import type { createAuthUseCase } from "./usecase/auth.usecase.js";
 
-	let message = $state("Loading WASM...");
+	type Props = { authUseCase: ReturnType<typeof createAuthUseCase> };
+	const { authUseCase }: Props = $props();
 
-	async function load() {
-		try {
-			message = await loadGreeting("PR Sidebar");
-		} catch (e: unknown) {
-			const errorMessage =
-				e instanceof Error ? e.message : "Unknown error";
-			message = `WASM init failed: ${errorMessage}`;
-		}
+	let authenticated = $state(false);
+	let loading = $state(true);
+
+	$effect(() => {
+		let cancelled = false;
+
+		untrack(async () => {
+			const result = await authUseCase.checkAuth();
+			if (!cancelled) {
+				authenticated = result;
+				loading = false;
+			}
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	async function handleLogin(): Promise<void> {
+		await authUseCase.login();
+		authenticated = true;
 	}
 
-	load();
+	async function handleLogout(): Promise<void> {
+		await authUseCase.logout();
+		authenticated = false;
+	}
 </script>
 
-<main>
-	<h1>PR Sidebar</h1>
-	<p>{message}</p>
-</main>
+{#if loading}
+	<p>Loading...</p>
+{:else if authenticated}
+	<MainScreen onLogout={handleLogout} />
+{:else}
+	<LoginScreen onLogin={handleLogin} />
+{/if}
