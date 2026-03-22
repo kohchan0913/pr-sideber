@@ -8,5 +8,11 @@
 		"isolatedModules": true,
 		"verbatimModuleSyntax": true
 	},
-	"include": ["vite.config.ts", "vitest.config.ts", "svelte.config.js", "manifest.config.ts", "src/build-config/build-guards.ts"]
+	"include": [
+		"vite.config.ts",
+		"vitest.config.ts",
+		"svelte.config.js",
+		"manifest.config.ts",
+		"src/build-config/build-guards.ts"
+	]
 }
