@@ -1,11 +1,15 @@
 import { mount } from "svelte";
+import { chromeSendMessage } from "../adapter/chrome/message.adapter";
 import App from "./App.svelte";
+import { createAuthUseCase } from "./usecase/auth.usecase";
 
 const target = document.getElementById("app");
 if (!target) {
 	throw new Error("Mount target #app not found");
 }
 
-const app = mount(App, { target });
+const authUseCase = createAuthUseCase(chromeSendMessage);
+
+const app = mount(App, { target, props: { authUseCase } });
 
 export default app;
