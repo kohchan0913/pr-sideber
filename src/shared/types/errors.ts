@@ -7,6 +7,14 @@ export type GitHubApiErrorCode =
 	| "graphql_error"
 	| "unknown";
 
+/** 一時的なネットワーク障害を表すエラー。リトライ可能な失敗に使用する */
+export class NetworkError extends Error {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = "NetworkError";
+	}
+}
+
 export class GitHubApiError extends Error {
 	readonly code: GitHubApiErrorCode;
 	readonly statusCode?: number;
