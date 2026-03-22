@@ -58,15 +58,19 @@ export class ChromeIdentityAdapter implements AuthPort {
 				redirect: "error",
 			});
 		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
+			if (import.meta.env.DEV) {
+				console.error("[identity.adapter] Device code request failed:", error);
+			}
 			throw new AuthError("device_code_request_failed", "Device code request failed");
 		}
 
 		if (!response.ok) {
-			throw new AuthError(
-				"device_code_request_failed",
-				`Device code request failed: ${response.status} ${response.statusText}`,
-			);
+			if (import.meta.env.DEV) {
+				console.error(
+					`[identity.adapter] Device code request failed: ${response.status} ${response.statusText}`,
+				);
+			}
+			throw new AuthError("device_code_request_failed", "Device code request failed");
 		}
 
 		const data = (await response.json()) as Record<string, unknown>;
@@ -95,12 +99,17 @@ export class ChromeIdentityAdapter implements AuthPort {
 				redirect: "error",
 			});
 		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
+			if (import.meta.env.DEV) {
+				console.error("[identity.adapter] Token polling failed:", error);
+			}
 			throw new AuthError("token_exchange_failed", "Token polling failed");
 		}
 
 		if (!response.ok) {
-			throw new AuthError("token_exchange_failed", `Token polling failed: ${response.status}`);
+			if (import.meta.env.DEV) {
+				console.error(`[identity.adapter] Token polling failed: ${response.status}`);
+			}
+			throw new AuthError("token_exchange_failed", "Token polling failed");
 		}
 
 		const data = (await response.json()) as Record<string, unknown>;
@@ -128,7 +137,7 @@ export class ChromeIdentityAdapter implements AuthPort {
 					if (import.meta.env.DEV) {
 						console.warn("[identity.adapter] OAuth error_description:", description);
 					}
-					throw new AuthError("token_exchange_failed", `Token exchange failed: ${description}`);
+					throw new AuthError("token_exchange_failed", "Token exchange failed");
 				}
 			}
 		}
