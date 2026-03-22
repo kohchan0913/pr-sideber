@@ -1,3 +1,8 @@
+pub mod dto;
+pub mod entity;
+pub mod error;
+pub mod status;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
