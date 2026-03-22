@@ -64,10 +64,15 @@ case "$FILE_PATH" in
     ;;
 esac
 
-# svelte-check (型チェック)
-if pnpm check 2>&1; then
-  echo "[hook] svelte-check: passed"
-else
-  echo "BLOCK: svelte-check failed" >&2
-  exit 2
-fi
+# svelte-check (型チェック) — JSON ファイルはスキップ
+case "$FILE_PATH" in
+  *.json) ;;
+  *)
+    if pnpm check 2>&1; then
+      echo "[hook] svelte-check: passed"
+    else
+      echo "BLOCK: svelte-check failed" >&2
+      exit 2
+    fi
+    ;;
+esac

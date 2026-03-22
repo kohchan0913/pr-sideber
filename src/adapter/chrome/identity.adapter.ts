@@ -20,12 +20,19 @@ export class ChromeIdentityAdapter implements AuthPort {
 	private cachedAuthenticated: boolean | null = null;
 	private cachedExpiresAt: number | undefined = undefined;
 	private refreshPromise: Promise<AuthToken | null> | null = null;
+	private disposed = false;
+
+	private readonly storageChangeListener: (
+		changes: Record<string, chrome.storage.StorageChange>,
+		areaName: string,
+	) => void;
 
 	constructor(
 		private readonly storage: StoragePort,
 		private readonly config: OAuthConfig,
 	) {
-		chrome.storage.onChanged.addListener((changes, areaName) => {
+		this.storageChangeListener = (changes, areaName) => {
+			if (this.disposed) return;
 			if (areaName !== "local") return;
 			if (TOKEN_STORAGE_KEY in changes) {
 				const change = changes[TOKEN_STORAGE_KEY];
@@ -37,7 +44,15 @@ export class ChromeIdentityAdapter implements AuthPort {
 					this.cachedExpiresAt = undefined;
 				}
 			}
-		});
+		};
+		chrome.storage.onChanged.addListener(this.storageChangeListener);
+	}
+
+	/** リスナーを解除しリソースを解放する。冪等であり複数回呼んでも安全 */
+	dispose(): void {
+		if (this.disposed) return;
+		this.disposed = true;
+		chrome.storage.onChanged.removeListener(this.storageChangeListener);
 	}
 
 	async requestDeviceCode(): Promise<DeviceCodeResponse> {
@@ -58,15 +73,21 @@ export class ChromeIdentityAdapter implements AuthPort {
 				redirect: "error",
 			});
 		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			throw new AuthError("device_code_request_failed", "Device code request failed");
+			if (import.meta.env.DEV) {
+				console.error("[identity.adapter] Device code request failed:", error);
+			}
+			throw new AuthError("device_code_request_failed", "Device code request failed", {
+				cause: error instanceof Error ? new Error(error.message) : new Error(String(error)),
+			});
 		}
 
 		if (!response.ok) {
-			throw new AuthError(
-				"device_code_request_failed",
-				`Device code request failed: ${response.status} ${response.statusText}`,
-			);
+			if (import.meta.env.DEV) {
+				console.error(
+					`[identity.adapter] Device code request failed: ${response.status} ${response.statusText}`,
+				);
+			}
+			throw new AuthError("device_code_request_failed", "Device code request failed");
 		}
 
 		const data = (await response.json()) as Record<string, unknown>;
@@ -95,12 +116,19 @@ export class ChromeIdentityAdapter implements AuthPort {
 				redirect: "error",
 			});
 		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			throw new AuthError("token_exchange_failed", "Token polling failed");
+			if (import.meta.env.DEV) {
+				console.error("[identity.adapter] Token polling failed:", error);
+			}
+			throw new AuthError("token_exchange_failed", "Token polling failed", {
+				cause: error instanceof Error ? new Error(error.message) : new Error(String(error)),
+			});
 		}
 
 		if (!response.ok) {
-			throw new AuthError("token_exchange_failed", `Token polling failed: ${response.status}`);
+			if (import.meta.env.DEV) {
+				console.error(`[identity.adapter] Token polling failed: ${response.status}`);
+			}
+			throw new AuthError("token_exchange_failed", "Token polling failed");
 		}
 
 		const data = (await response.json()) as Record<string, unknown>;
@@ -128,7 +156,7 @@ export class ChromeIdentityAdapter implements AuthPort {
 					if (import.meta.env.DEV) {
 						console.warn("[identity.adapter] OAuth error_description:", description);
 					}
-					throw new AuthError("token_exchange_failed", `Token exchange failed: ${description}`);
+					throw new AuthError("token_exchange_failed", "Token exchange failed");
 				}
 			}
 		}
@@ -253,6 +281,12 @@ export class ChromeIdentityAdapter implements AuthPort {
 		}
 		if (typeof data.verification_uri !== "string" || !data.verification_uri) {
 			throw new AuthError("device_code_validation_failed", "Missing verification_uri in response");
+		}
+		if (!data.verification_uri.startsWith("https://github.com/")) {
+			throw new AuthError(
+				"device_code_validation_failed",
+				"Invalid verification_uri: must be a GitHub URL",
+			);
 		}
 		if (typeof data.expires_in !== "number" || data.expires_in <= 0) {
 			throw new AuthError("device_code_validation_failed", "Invalid expires_in in response");

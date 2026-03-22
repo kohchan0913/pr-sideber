@@ -96,7 +96,7 @@ describe("auth usecase", () => {
 			expect((error as Error).message).toBe("Device flow expired");
 		});
 
-		it("should throw when sendMessage rejects during poll", async () => {
+		it("should reject after exhausting retries even without onStateChange callback", async () => {
 			mockSendMessage.mockRejectedValue(new Error("Network error"));
 
 			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
@@ -104,11 +104,215 @@ describe("auth usecase", () => {
 				.waitForAuthorization("device-code-123", 5, 900)
 				.catch((e: unknown) => e);
 
-			await vi.advanceTimersByTimeAsync(5000);
+			// interval (5秒) + リトライバックオフ (500ms + 1000ms) で全部失敗
+			await vi.advanceTimersByTimeAsync(6500);
 
 			const error = await promise;
 			expect(error).toBeInstanceOf(Error);
 			expect((error as Error).message).toBe("Network error");
+			// 3回呼ばれる (リトライ上限)
+			expect(mockSendMessage).toHaveBeenCalledTimes(3);
+		});
+
+		it("should retry once on transient network error then succeed", async () => {
+			// リトライ中は polling 状態を維持し、追加の中間状態通知は行わない
+			const successResult: PollResult = {
+				status: "success",
+				token: { accessToken: "test-token", tokenType: "bearer", scope: "repo" },
+			};
+			mockSendMessage
+				.mockRejectedValueOnce(new Error("Network error"))
+				.mockResolvedValueOnce({ ok: true as const, data: successResult });
+
+			const onStateChange = vi.fn();
+			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
+			const promise = useCase.waitForAuthorization("device-code-123", 5, 900, onStateChange);
+
+			// interval (5秒) + リトライバックオフ (500ms)
+			await vi.advanceTimersByTimeAsync(5500);
+
+			await promise;
+
+			expect(mockSendMessage).toHaveBeenCalledTimes(2);
+			expect(onStateChange).toHaveBeenCalledWith({ phase: "success" });
+		});
+
+		it("should retry twice on transient network errors then succeed", async () => {
+			// リトライ中は polling 状態を維持し、追加の中間状態通知は行わない
+			const successResult: PollResult = {
+				status: "success",
+				token: { accessToken: "test-token", tokenType: "bearer", scope: "repo" },
+			};
+			mockSendMessage
+				.mockRejectedValueOnce(new Error("Network error"))
+				.mockRejectedValueOnce(new Error("Network error"))
+				.mockResolvedValueOnce({ ok: true as const, data: successResult });
+
+			const onStateChange = vi.fn();
+			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
+			const promise = useCase.waitForAuthorization("device-code-123", 5, 900, onStateChange);
+
+			// interval (5秒) + リトライバックオフ (500ms + 1000ms)
+			await vi.advanceTimersByTimeAsync(6500);
+
+			await promise;
+
+			expect(mockSendMessage).toHaveBeenCalledTimes(3);
+			expect(onStateChange).toHaveBeenCalledWith({ phase: "success" });
+		});
+
+		it("should fail after 3 consecutive network errors (retry limit exceeded)", async () => {
+			mockSendMessage
+				.mockRejectedValueOnce(new Error("fetch failed"))
+				.mockRejectedValueOnce(new Error("fetch failed"))
+				.mockRejectedValueOnce(new Error("fetch failed"));
+
+			const onStateChange = vi.fn();
+			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
+			const promise = useCase
+				.waitForAuthorization("device-code-123", 5, 900, onStateChange)
+				.catch((e: unknown) => e);
+
+			// interval (5秒) + リトライバックオフ (500ms + 1000ms) を段階的に進める
+			await vi.advanceTimersByTimeAsync(5000);
+			await vi.advanceTimersByTimeAsync(500);
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const error = await promise;
+			expect(error).toBeInstanceOf(Error);
+			expect((error as Error).message).toBe("fetch failed");
+			expect(mockSendMessage).toHaveBeenCalledTimes(3);
+			expect(onStateChange).toHaveBeenCalledWith({ phase: "error", message: "fetch failed" });
+		});
+
+		it("should retry on RUNTIME_ERROR response then succeed", async () => {
+			const successResult: PollResult = {
+				status: "success",
+				token: { accessToken: "test-token", tokenType: "bearer", scope: "repo" },
+			};
+			mockSendMessage
+				.mockResolvedValueOnce({
+					ok: false as const,
+					error: { code: "RUNTIME_ERROR", message: "Service worker restarted" },
+				})
+				.mockResolvedValueOnce({ ok: true as const, data: successResult });
+
+			const onStateChange = vi.fn();
+			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
+			const promise = useCase.waitForAuthorization("device-code-123", 5, 900, onStateChange);
+
+			// interval (5秒) + リトライバックオフ (500ms)
+			await vi.advanceTimersByTimeAsync(5500);
+
+			await promise;
+
+			expect(mockSendMessage).toHaveBeenCalledTimes(2);
+			expect(onStateChange).toHaveBeenCalledWith({ phase: "success" });
+		});
+
+		it("should retry on NO_RESPONSE response then succeed", async () => {
+			const successResult: PollResult = {
+				status: "success",
+				token: { accessToken: "test-token", tokenType: "bearer", scope: "repo" },
+			};
+			mockSendMessage
+				.mockResolvedValueOnce({
+					ok: false as const,
+					error: { code: "NO_RESPONSE", message: "No response from background" },
+				})
+				.mockResolvedValueOnce({ ok: true as const, data: successResult });
+
+			const onStateChange = vi.fn();
+			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
+			const promise = useCase.waitForAuthorization("device-code-123", 5, 900, onStateChange);
+
+			// interval (5秒) + リトライバックオフ (500ms)
+			await vi.advanceTimersByTimeAsync(5500);
+
+			await promise;
+
+			expect(mockSendMessage).toHaveBeenCalledTimes(2);
+			expect(onStateChange).toHaveBeenCalledWith({ phase: "success" });
+		});
+
+		it("should fail immediately on non-retryable error response", async () => {
+			mockSendMessage.mockResolvedValueOnce({
+				ok: false as const,
+				error: { code: "AUTH_DEVICE_POLL_ERROR", message: "Invalid device code" },
+			});
+
+			const onStateChange = vi.fn();
+			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
+			const promise = useCase
+				.waitForAuthorization("device-code-123", 5, 900, onStateChange)
+				.catch((e: unknown) => e);
+
+			await vi.advanceTimersByTimeAsync(5000);
+
+			const error = await promise;
+			expect(error).toBeInstanceOf(Error);
+			expect((error as Error).message).toBe("Invalid device code");
+			// リトライなし: 1回だけ呼ばれる
+			expect(mockSendMessage).toHaveBeenCalledTimes(1);
+			expect(onStateChange).toHaveBeenCalledWith({
+				phase: "error",
+				message: "Invalid device code",
+			});
+		});
+
+		it("should expire when deadline is exceeded during retry wait", async () => {
+			// expiresIn=2秒, interval=5秒 (実質5秒下限)
+			// sendMessage が1回 reject → リトライの wait (interval=5秒) 中に deadline(2秒) を超過 → expired
+			mockSendMessage.mockRejectedValueOnce(new Error("Network error"));
+
+			const onStateChange = vi.fn();
+			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
+			const promise = useCase
+				.waitForAuthorization("device-code-123", 5, 2, onStateChange)
+				.catch((e: unknown) => e);
+
+			// interval (5秒) 経過でポーリング開始 → reject → リトライ wait 中に deadline 超過
+			await vi.advanceTimersByTimeAsync(10_000);
+
+			const error = await promise;
+			expect(error).toBeInstanceOf(Error);
+			expect(onStateChange).toHaveBeenCalledWith({ phase: "expired" });
+		});
+
+		it("should fail after 3 consecutive RUNTIME_ERROR responses (retry limit exceeded)", async () => {
+			mockSendMessage
+				.mockResolvedValueOnce({
+					ok: false as const,
+					error: { code: "RUNTIME_ERROR", message: "Service worker restarted" },
+				})
+				.mockResolvedValueOnce({
+					ok: false as const,
+					error: { code: "RUNTIME_ERROR", message: "Service worker restarted" },
+				})
+				.mockResolvedValueOnce({
+					ok: false as const,
+					error: { code: "RUNTIME_ERROR", message: "Service worker restarted" },
+				});
+
+			const onStateChange = vi.fn();
+			const useCase = createAuthUseCase(mockSendMessage as SendMessage);
+			const promise = useCase
+				.waitForAuthorization("device-code-123", 5, 900, onStateChange)
+				.catch((e: unknown) => e);
+
+			// interval (5秒) + リトライバックオフ (500ms + 1000ms) を段階的に進める
+			await vi.advanceTimersByTimeAsync(5000);
+			await vi.advanceTimersByTimeAsync(500);
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const error = await promise;
+			expect(error).toBeInstanceOf(Error);
+			expect((error as Error).message).toBe("Service worker restarted");
+			expect(mockSendMessage).toHaveBeenCalledTimes(3);
+			expect(onStateChange).toHaveBeenCalledWith({
+				phase: "error",
+				message: "Service worker restarted",
+			});
 		});
 	});
 

@@ -1,8 +1,18 @@
 import type { DeviceCodeResponse, PollResult } from "../../domain/types/auth";
 import type { SendMessage } from "../../shared/ports/message.port";
+import type { ResponseMessage } from "../../shared/types/messages";
 
 /** Side Panel 側のポーリング間隔下限 (秒) */
 const MIN_POLL_INTERVAL_SEC = 5;
+
+/** ネットワークエラー等の一時障害に対するリトライ上限 */
+const MAX_POLL_RETRIES = 3;
+
+/** slow_down 応答時のポーリング間隔上限 (秒) */
+const MAX_POLL_INTERVAL_SEC = 60;
+
+/** リトライ可能なエラーレスポンスの code 一覧 */
+const RETRYABLE_ERROR_CODES = new Set(["RUNTIME_ERROR", "NO_RESPONSE"]);
 
 export type DeviceFlowState =
 	| { readonly phase: "idle" }
@@ -28,7 +38,10 @@ export function createAuthUseCase(sendMessage: SendMessage) {
 				return false;
 			}
 			return response.data.isAuthenticated;
-		} catch {
+		} catch (error) {
+			if (import.meta.env.DEV) {
+				console.error("[auth.usecase] checkAuth failed:", error);
+			}
 			return false;
 		}
 	}
@@ -57,6 +70,51 @@ export function createAuthUseCase(sendMessage: SendMessage) {
 
 		onStateChange?.({ phase: "polling" });
 
+		/**
+		 * 1回分のポーリングをリトライ付きで実行する。
+		 * sendMessage の throw や RUNTIME_ERROR/NO_RESPONSE は一時障害として
+		 * 最大 MAX_POLL_RETRIES 回までリトライする。
+		 * それ以外のエラーレスポンスは即座に上位へ伝播する。
+		 */
+		async function pollWithRetry(): Promise<PollResult> {
+			let lastError: Error | undefined;
+
+			for (let attempt = 0; attempt < MAX_POLL_RETRIES; attempt++) {
+				if (attempt > 0) {
+					await wait(attempt * 500);
+					if (Date.now() >= deadline) {
+						onStateChange?.({ phase: "expired" });
+						throw new Error("Device flow expired. Please try again.");
+					}
+				}
+				let response: ResponseMessage<"AUTH_DEVICE_POLL">;
+				try {
+					response = await sendMessage("AUTH_DEVICE_POLL", { deviceCode });
+				} catch (error) {
+					// sendMessage が throw した場合 (ネットワーク断等): リトライ可能
+					lastError = error instanceof Error ? error : new Error(String(error));
+					continue;
+				}
+
+				if (!response.ok) {
+					if (RETRYABLE_ERROR_CODES.has(response.error.code)) {
+						lastError = new Error(response.error.message);
+						continue;
+					}
+					// リトライ不可のエラーは即 throw
+					onStateChange?.({ phase: "error", message: response.error.message });
+					throw new Error(response.error.message);
+				}
+
+				return response.data;
+			}
+
+			// リトライ上限超過
+			const message = lastError?.message ?? "Unknown polling error";
+			onStateChange?.({ phase: "error", message });
+			throw lastError ?? new Error(message);
+		}
+
 		while (Date.now() < deadline) {
 			await wait(currentInterval * 1000);
 
@@ -65,13 +123,7 @@ export function createAuthUseCase(sendMessage: SendMessage) {
 				throw new Error("Device flow expired. Please try again.");
 			}
 
-			const response = await sendMessage("AUTH_DEVICE_POLL", { deviceCode });
-			if (!response.ok) {
-				onStateChange?.({ phase: "error", message: response.error.message });
-				throw new Error(response.error.message);
-			}
-
-			const result: PollResult = response.data;
+			const result = await pollWithRetry();
 
 			switch (result.status) {
 				case "success":
@@ -80,7 +132,10 @@ export function createAuthUseCase(sendMessage: SendMessage) {
 				case "pending":
 					continue;
 				case "slow_down":
-					currentInterval = Math.max(result.interval, currentInterval + 5);
+					currentInterval = Math.min(
+						Math.max(result.interval, currentInterval + 5),
+						MAX_POLL_INTERVAL_SEC,
+					);
 					continue;
 				case "expired":
 					onStateChange?.({ phase: "expired" });
