@@ -323,23 +323,25 @@ describe("ChromeIdentityAdapter — Device Flow", () => {
 			vi.useFakeTimers();
 			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
 
-			globalThis.fetch = vi.fn().mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					access_token: "gho_test_access_token",
-					token_type: "bearer",
-					scope: "repo",
-					expires_in: 3600,
-				}),
-			});
+			try {
+				globalThis.fetch = vi.fn().mockResolvedValue({
+					ok: true,
+					json: async () => ({
+						access_token: "gho_test_access_token",
+						token_type: "bearer",
+						scope: "repo",
+						expires_in: 3600,
+					}),
+				});
 
-			await adapter.pollForToken(MOCK_DEVICE_CODE_RESPONSE.deviceCode);
+				await adapter.pollForToken(MOCK_DEVICE_CODE_RESPONSE.deviceCode);
 
-			const savedToken = mockStorage.set.mock.calls[0][1] as AuthToken;
-			const expectedExpiresAt = new Date("2026-01-01T00:00:00Z").getTime() + 3600 * 1000;
-			expect(savedToken.expiresAt).toBe(expectedExpiresAt);
-
-			vi.useRealTimers();
+				const savedToken = mockStorage.set.mock.calls[0][1] as AuthToken;
+				const expectedExpiresAt = new Date("2026-01-01T00:00:00Z").getTime() + 3600 * 1000;
+				expect(savedToken.expiresAt).toBe(expectedExpiresAt);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it("should set refreshToken when refresh_token is present in response", async () => {
@@ -527,49 +529,57 @@ describe("ChromeIdentityAdapter — Device Flow", () => {
 			vi.useFakeTimers();
 			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
 
-			const futureExpiresAt = new Date("2026-01-01T00:00:00Z").getTime() + 3600 * 1000;
-			mockStorage.get.mockResolvedValue({
-				...MOCK_TOKEN,
-				expiresAt: futureExpiresAt,
-			});
+			try {
+				const futureExpiresAt = new Date("2026-01-01T00:00:00Z").getTime() + 3600 * 1000;
+				mockStorage.get.mockResolvedValue({
+					...MOCK_TOKEN,
+					expiresAt: futureExpiresAt,
+				});
 
-			const result = await adapter.isAuthenticated();
+				const result = await adapter.isAuthenticated();
 
-			expect(result).toBe(true);
-
-			vi.useRealTimers();
+				expect(result).toBe(true);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it("should return false when token expiresAt equals current time (boundary)", async () => {
 			vi.useFakeTimers();
 			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
 
-			const exactNow = new Date("2026-01-01T00:00:00Z").getTime();
-			mockStorage.get.mockResolvedValue({
-				...MOCK_TOKEN,
-				expiresAt: exactNow,
-			});
+			try {
+				const exactNow = new Date("2026-01-01T00:00:00Z").getTime();
+				mockStorage.get.mockResolvedValue({
+					...MOCK_TOKEN,
+					expiresAt: exactNow,
+				});
 
-			const result = await adapter.isAuthenticated();
+				const result = await adapter.isAuthenticated();
 
-			expect(result).toBe(false);
+				expect(result).toBe(false);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it("should return false when token exists but expiresAt is in the past", async () => {
 			vi.useFakeTimers();
 			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
 
-			const pastExpiresAt = new Date("2026-01-01T00:00:00Z").getTime() - 1000;
-			mockStorage.get.mockResolvedValue({
-				...MOCK_TOKEN,
-				expiresAt: pastExpiresAt,
-			});
+			try {
+				const pastExpiresAt = new Date("2026-01-01T00:00:00Z").getTime() - 1000;
+				mockStorage.get.mockResolvedValue({
+					...MOCK_TOKEN,
+					expiresAt: pastExpiresAt,
+				});
 
-			const result = await adapter.isAuthenticated();
+				const result = await adapter.isAuthenticated();
 
-			expect(result).toBe(false);
-
-			vi.useRealTimers();
+				expect(result).toBe(false);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it("should use cached result on second call without hitting storage again", async () => {
@@ -587,7 +597,7 @@ describe("ChromeIdentityAdapter — Device Flow", () => {
 			expect(mockStorage.get).not.toHaveBeenCalled();
 		});
 
-		it("should return true from cache after successful pollForToken without hitting storage", async () => {
+		it("should re-validate from storage after successful pollForToken (cache is invalidated)", async () => {
 			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				json: async () => ({
@@ -599,14 +609,12 @@ describe("ChromeIdentityAdapter — Device Flow", () => {
 
 			await adapter.pollForToken(MOCK_DEVICE_CODE_RESPONSE.deviceCode);
 			mockStorage.get.mockClear();
-			mockStorage.get.mockImplementation(() => {
-				throw new Error("storage.get should not be called when cache is populated");
-			});
+			mockStorage.get.mockResolvedValue(MOCK_TOKEN);
 
 			const result = await adapter.isAuthenticated();
 
 			expect(result).toBe(true);
-			expect(mockStorage.get).not.toHaveBeenCalled();
+			expect(mockStorage.get).toHaveBeenCalledTimes(1);
 		});
 
 		it("should return false from cache after clearToken without hitting storage", async () => {
@@ -648,7 +656,7 @@ describe("ChromeIdentityAdapter — Device Flow", () => {
 			expect(mockStorage.get).not.toHaveBeenCalled();
 		});
 
-		it("should update cache to true when storage.onChanged fires with token key set", async () => {
+		it("should invalidate cache when storage.onChanged fires with token key set, so next isAuthenticated re-reads storage", async () => {
 			mockStorage.get.mockResolvedValue(null);
 			await adapter.isAuthenticated();
 
@@ -661,14 +669,12 @@ describe("ChromeIdentityAdapter — Device Flow", () => {
 
 			listener({ github_auth_token: { newValue: MOCK_TOKEN } }, "local");
 			mockStorage.get.mockClear();
-			mockStorage.get.mockImplementation(() => {
-				throw new Error("storage.get should not be called when cache is populated");
-			});
+			mockStorage.get.mockResolvedValue(MOCK_TOKEN);
 
 			const result = await adapter.isAuthenticated();
 
 			expect(result).toBe(true);
-			expect(mockStorage.get).not.toHaveBeenCalled();
+			expect(mockStorage.get).toHaveBeenCalledTimes(1);
 		});
 
 		it("should not update cache when storage.onChanged fires for non-local area", async () => {
@@ -725,6 +731,126 @@ describe("ChromeIdentityAdapter — Device Flow", () => {
 			await adapter.isAuthenticated();
 
 			expect(mockStorage.get).toHaveBeenCalledWith("github_auth_token", isAuthToken);
+		});
+
+		// Issue #117: storageChangeListener 後の isAuthenticated() で expiresAt が未検証になるバグ
+		//
+		// 現在の実装では listener が cachedAuthenticated=true, cachedExpiresAt=undefined をセットするため、
+		// isAuthenticated() の行235で cachedAuthenticated !== null が true となり、
+		// ストレージ再読み込みパスに入らず true が返されてしまう。
+		// 修正後は listener が cachedAuthenticated=null をセットし、ストレージ再読み込みパスに入って
+		// expiresAt を検証した結果 false を返すようになる。
+		it("should return false after storageChangeListener fires when stored token is expired", async () => {
+			// 初期状態: キャッシュ未初期化 → storage から null を返して false にする
+			mockStorage.get.mockResolvedValue(null);
+			await adapter.isAuthenticated();
+
+			// storageChangeListener を発火させる（トークンがセットされた通知）
+			// listener は newValue の存在のみチェックし中身は見ない。
+			// 実際の expiresAt 検証は isAuthenticated() 内のストレージ再読み込みで行われる。
+			const chromeMock = getChromeMock();
+			const listener = chromeMock.storage.onChanged.addListener.mock.calls[0][0] as (
+				changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+				areaName: string,
+			) => void;
+			listener({ github_auth_token: { newValue: MOCK_TOKEN } }, "local");
+
+			// ストレージには期限切れトークンが入っている状態をセットアップ
+			const expiredToken: AuthToken = {
+				accessToken: "gho_expired",
+				tokenType: "bearer",
+				scope: "repo",
+				expiresAt: Date.now() - 1000, // 1秒前に期限切れ
+			};
+			mockStorage.get.mockClear();
+			mockStorage.get.mockResolvedValue(expiredToken);
+
+			// storageChangeListener 後の isAuthenticated() はストレージを再読み込みし、
+			// expiresAt を検証して false を返すべき
+			const result = await adapter.isAuthenticated();
+
+			expect(result).toBe(false);
+		});
+
+		// 現在の実装では listener が cachedAuthenticated=true, cachedExpiresAt=undefined をセットするため、
+		// isAuthenticated() の行235で cachedAuthenticated !== null が true となり、
+		// ストレージ再読み込みせずに true をキャッシュから返してしまう。
+		// テスト自体は true を期待しているので一見 pass しそうだが、storage.get が呼ばれないため
+		// 最終行の toHaveBeenCalledWith アサーションで fail する。
+		// 修正後は listener が cachedAuthenticated=null をセットし、ストレージ再読み込みパスに入る。
+		it("should re-read storage after storageChangeListener fires and validate expiresAt for valid token", async () => {
+			// 初期状態: キャッシュ未初期化 → storage から null を返して false にする
+			mockStorage.get.mockResolvedValue(null);
+			await adapter.isAuthenticated();
+
+			// storageChangeListener を発火させる（トークンがセットされた通知）
+			// listener は newValue の存在のみチェックし中身は見ない。
+			// 実際の expiresAt 検証は isAuthenticated() 内のストレージ再読み込みで行われる。
+			const chromeMock = getChromeMock();
+			const listener = chromeMock.storage.onChanged.addListener.mock.calls[0][0] as (
+				changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+				areaName: string,
+			) => void;
+			listener({ github_auth_token: { newValue: MOCK_TOKEN } }, "local");
+
+			// ストレージには有効期限が十分先のトークンが入っている
+			const validToken: AuthToken = {
+				accessToken: "gho_valid",
+				tokenType: "bearer",
+				scope: "repo",
+				expiresAt: Date.now() + 3600 * 1000, // 1時間後
+			};
+			mockStorage.get.mockClear();
+			mockStorage.get.mockResolvedValue(validToken);
+
+			// storageChangeListener 後の isAuthenticated() はストレージを再読み込みすべき
+			const result = await adapter.isAuthenticated();
+
+			expect(result).toBe(true);
+			// ストレージから再読み込みが行われたことを検証（キャッシュで済ませていないこと）
+			expect(mockStorage.get).toHaveBeenCalledWith("github_auth_token", isAuthToken);
+		});
+
+		// バッファ境界値テスト: expiresAt が TOKEN_EXPIRY_BUFFER_MS - 1 (バッファ圏内ギリギリ)
+		// この値は isTokenExpiredWithBuffer で Date.now() >= expiresAt - buffer と判定され、
+		// expiresAt = now + buffer - 1 → now >= (now + buffer - 1) - buffer → now >= now - 1 → true
+		// つまり期限切れ扱いとなり false が返る。
+		// このテストは有効トークンテストの「expiresAt 検証の証拠」も兼ねる:
+		// ストレージ再読み込みが行われなければ expiresAt は検証されず true が返されてしまうため。
+		it("should return false after storageChangeListener fires when token is just inside buffer boundary", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+			try {
+				// 初期状態: キャッシュ未初期化 → storage から null を返して false にする
+				mockStorage.get.mockResolvedValue(null);
+				await adapter.isAuthenticated();
+
+				// storageChangeListener を発火させる
+				const chromeMock = getChromeMock();
+				const listener = chromeMock.storage.onChanged.addListener.mock.calls[0][0] as (
+					changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+					areaName: string,
+				) => void;
+				listener({ github_auth_token: { newValue: MOCK_TOKEN } }, "local");
+
+				// ストレージにはバッファ境界ギリギリ (buffer - 1ms) のトークンが入っている
+				const now = Date.now();
+				const borderlineToken: AuthToken = {
+					accessToken: "gho_borderline",
+					tokenType: "bearer",
+					scope: "repo",
+					expiresAt: now + TOKEN_EXPIRY_BUFFER_MS - 1, // バッファ圏内ギリギリ → false
+				};
+				mockStorage.get.mockClear();
+				mockStorage.get.mockResolvedValue(borderlineToken);
+
+				const result = await adapter.isAuthenticated();
+
+				expect(result).toBe(false);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 	});
 });
