@@ -7,10 +7,19 @@
 			"Bash(gh repo:*)",
 			"Bash(gh issue:*)",
 			"Bash(gh label:*)",
-			"Bash(gh auth:*)",
-			"Bash(gh api:*)"
+			"Bash(gh auth status:*)",
+			"Bash(gh api graphql:*)",
+			"Bash(gh api repos/:*)",
+			"Bash(gh api /repos/:*)",
+			"Bash(gh api -X DELETE repos/:*)",
+			"Bash(gh api -X DELETE /repos/:*)"
 		],
 		"deny": [
+			"Bash(gh auth token:*)",
+			"Bash(gh auth login:*)",
+			"Bash(gh auth logout:*)",
+			"Bash(gh auth refresh:*)",
+			"Bash(gh auth setup-git:*)",
 			"Read(.envrc)",
 			"Read(.claude/settings.local.json)",
 			"Bash(cat .envrc)",
