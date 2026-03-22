@@ -1,5 +1,5 @@
+import type { DeviceCodeResponse, PollResult } from "../../domain/types/auth";
 import type { SendMessage } from "../../shared/ports/message.port";
-import type { DeviceCodeResponse, PollResult } from "../../shared/types/auth";
 
 /** Side Panel 側のポーリング間隔下限 (秒) */
 const MIN_POLL_INTERVAL_SEC = 5;

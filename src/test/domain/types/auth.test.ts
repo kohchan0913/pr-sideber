@@ -44,7 +44,7 @@ describe("AuthToken の型定義配置", () => {
 		expect(content).toMatch(/export\s+type\s+AuthToken\b/);
 	});
 
-	it("shared/types/auth が domain/types/auth から AuthToken を re-export していること", () => {
+	it("shared/types/auth が domain/types/auth から AuthToken を import して型ガードで使用していること", () => {
 		const sharedAuthFiles = import.meta.glob("../../../shared/types/auth.ts", {
 			query: "?raw",
 			eager: true,
@@ -55,9 +55,13 @@ describe("AuthToken の型定義配置", () => {
 		const content = Object.values(sharedAuthFiles)[0]?.default;
 		expect(content).toBeDefined();
 
-		// shared/types/auth.ts が domain/types/auth から re-export していることを検証
-		// パターン: `export type { AuthToken } from "...domain/types/auth"`
+		// shared/types/auth.ts が domain/types/auth から AuthToken を import していることを検証
 		expect(content).toMatch(
+			/import\s+type\s*\{[^}]*AuthToken[^}]*\}\s*from\s+["'].*domain\/types\/auth["']/,
+		);
+
+		// re-export はせず、型ガード (isAuthToken) で使用するのみ
+		expect(content).not.toMatch(
 			/export\s+type\s*\{[^}]*AuthToken[^}]*\}\s*from\s+["'].*domain\/types\/auth["']/,
 		);
 	});

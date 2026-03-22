@@ -6,7 +6,6 @@ export type OAuthConfig = {
 };
 
 import type { AuthToken } from "../../domain/types/auth";
-export type { AuthToken, DeviceCodeResponse, PollResult } from "../../domain/types/auth";
 
 export function isAuthToken(value: unknown): value is AuthToken {
 	if (typeof value !== "object" || value === null) {

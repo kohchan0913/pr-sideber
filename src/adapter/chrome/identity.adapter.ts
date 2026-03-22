@@ -1,11 +1,7 @@
 import type { AuthPort } from "../../domain/ports/auth.port";
 import type { StoragePort } from "../../domain/ports/storage.port";
-import type {
-	AuthToken,
-	DeviceCodeResponse,
-	OAuthConfig,
-	PollResult,
-} from "../../shared/types/auth";
+import type { AuthToken, DeviceCodeResponse, PollResult } from "../../domain/types/auth";
+import type { OAuthConfig } from "../../shared/types/auth";
 import { AuthError, isAuthToken } from "../../shared/types/auth";
 
 const TOKEN_STORAGE_KEY = "github_auth_token";

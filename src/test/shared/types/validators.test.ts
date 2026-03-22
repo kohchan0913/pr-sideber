@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AuthToken } from "../../../shared/types/auth";
+import type { AuthToken } from "../../../domain/types/auth";
 import { isAuthToken } from "../../../shared/types/auth";
 
 describe("isAuthToken", () => {
