@@ -2,7 +2,7 @@ import type { AuthPort } from "../../domain/ports/auth.port";
 import type { StoragePort } from "../../domain/ports/storage.port";
 import { generateCodeChallenge, generateCodeVerifier, generateState } from "../../shared/crypto";
 import type { AuthToken, OAuthConfig } from "../../shared/types/auth";
-import { AuthError } from "../../shared/types/auth";
+import { AuthError, isAuthToken } from "../../shared/types/auth";
 
 const TOKEN_STORAGE_KEY = "github_auth_token";
 
@@ -25,7 +25,7 @@ export class ChromeIdentityAdapter implements AuthPort {
 	}
 
 	async getToken(): Promise<AuthToken | null> {
-		return this.storage.get<AuthToken>(TOKEN_STORAGE_KEY);
+		return this.storage.get<AuthToken>(TOKEN_STORAGE_KEY, isAuthToken);
 	}
 
 	async clearToken(): Promise<void> {

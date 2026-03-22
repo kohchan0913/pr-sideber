@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChromeIdentityAdapter } from "../../../adapter/chrome/identity.adapter";
 import type { StoragePort } from "../../../domain/ports/storage.port";
 import type { AuthToken, OAuthConfig } from "../../../shared/types/auth";
-import { AuthError } from "../../../shared/types/auth";
+import { AuthError, isAuthToken } from "../../../shared/types/auth";
 import { getChromeMock, resetChromeMock, setupChromeMock } from "../../mocks/chrome.mock";
 
 function createMockStorage(): StoragePort & {
@@ -428,7 +428,7 @@ describe("ChromeIdentityAdapter", () => {
 
 			const result = await adapter.getToken();
 
-			expect(mockStorage.get).toHaveBeenCalledWith("github_auth_token");
+			expect(mockStorage.get).toHaveBeenCalledWith("github_auth_token", isAuthToken);
 			expect(result).toEqual(MOCK_TOKEN);
 		});
 
