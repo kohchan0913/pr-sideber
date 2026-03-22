@@ -12,5 +12,5 @@
 		"types": ["chrome"]
 	},
 	"include": ["src/**/*", "src/**/*.svelte"],
-	"exclude": ["node_modules", "dist", "src/build-config/build-guards.ts"]
+	"exclude": ["node_modules", "dist"]
 }
