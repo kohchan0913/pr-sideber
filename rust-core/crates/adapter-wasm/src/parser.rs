@@ -516,13 +516,14 @@ mod tests {
     }
 
     #[test]
-    fn data_null_returns_error_or_empty() {
+    fn data_null_returns_empty_response_error() {
         let json = r#"{"data": null}"#;
         let result = parse_pull_request_nodes(json);
-        // data が null の場合、エラーまたは空 Vec のどちらかであること
-        if let Ok(prs) = result {
-            assert!(prs.is_empty(), "data:null should yield empty Vec");
-        }
+        let err = result.expect_err("data:null should return error");
+        assert!(
+            matches!(err, WasmError::EmptyResponse),
+            "should be EmptyResponse variant, got: {err:?}"
+        );
     }
 
     #[test]
