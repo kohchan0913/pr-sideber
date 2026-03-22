@@ -59,9 +59,13 @@ fi
 
 # cargo audit (脆弱性スキャン)
 if command -v cargo-audit >/dev/null 2>&1; then
-  if cargo audit 2>&1; then
+  AUDIT_OUTPUT=$(cargo audit 2>&1) || AUDIT_EXIT=$?
+  if [ "${AUDIT_EXIT:-0}" -eq 0 ]; then
     echo "[hook] cargo audit: passed"
+  elif echo "$AUDIT_OUTPUT" | grep -q "couldn't fetch advisory database"; then
+    echo "[hook] cargo audit: skipped (advisory database unavailable)"
   else
+    echo "$AUDIT_OUTPUT" >&2
     echo "BLOCK: cargo audit found vulnerabilities" >&2
     exit 2
   fi
