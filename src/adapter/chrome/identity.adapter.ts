@@ -44,7 +44,7 @@ export class ChromeIdentityAdapter implements AuthPort {
 			if (TOKEN_STORAGE_KEY in changes) {
 				const change = changes[TOKEN_STORAGE_KEY];
 				if (change.newValue !== undefined) {
-					this.cachedAuthenticated = true;
+					this.cachedAuthenticated = null;
 					this.cachedExpiresAt = undefined; // 次回 isAuthenticated() で再取得
 				} else {
 					this.cachedAuthenticated = false;
