@@ -1,3 +1,6 @@
+export type ApprovalStatus = "Approved" | "ChangesRequested" | "ReviewRequired" | "Pending";
+export type CiStatus = "Passed" | "Failed" | "Running" | "Pending" | "None";
+
 /** Rust の domain::dto::PrItemDto に対応する TypeScript 型 */
 export interface PrItemDto {
 	readonly id: string;
@@ -7,8 +10,8 @@ export interface PrItemDto {
 	readonly url: string;
 	readonly repository: string;
 	readonly isDraft: boolean;
-	readonly approvalStatus: string;
-	readonly ciStatus: string;
+	readonly approvalStatus: ApprovalStatus;
+	readonly ciStatus: CiStatus;
 	readonly additions: number;
 	readonly deletions: number;
 	readonly createdAt: string;

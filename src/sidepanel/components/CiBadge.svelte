@@ -1,8 +1,9 @@
 <script lang="ts">
+	import type { CiStatus } from "../../shared/types/wasm";
 	import "../styles/badge.css";
 
 	type Props = {
-		ciStatus: string;
+		ciStatus: CiStatus;
 	};
 
 	const { ciStatus }: Props = $props();

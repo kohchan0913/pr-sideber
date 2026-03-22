@@ -1,6 +1,12 @@
 import { mount, unmount } from "svelte";
 import { afterEach, describe, expect, it } from "vitest";
+import type { CiStatus } from "../../../shared/types/wasm";
 import CiBadge from "../../../sidepanel/components/CiBadge.svelte";
+
+/** テスト専用: 型チェックを迂回して不正値を注入する */
+function unsafeCast<T>(value: unknown): T {
+	return value as T;
+}
 
 describe("CiBadge", () => {
 	let component: ReturnType<typeof mount>;
@@ -70,7 +76,7 @@ describe("CiBadge", () => {
 	it("should render nothing when status is an empty string", () => {
 		component = mount(CiBadge, {
 			target: document.body,
-			props: { ciStatus: "" },
+			props: { ciStatus: unsafeCast<CiStatus>("") },
 		});
 		const badge = document.querySelector(".badge");
 		expect(badge).toBeNull();
@@ -79,7 +85,7 @@ describe("CiBadge", () => {
 	it("should render nothing when status is an unknown value", () => {
 		component = mount(CiBadge, {
 			target: document.body,
-			props: { ciStatus: "UnknownStatus" },
+			props: { ciStatus: unsafeCast<CiStatus>("UnknownStatus") },
 		});
 		const badge = document.querySelector(".badge");
 		expect(badge).toBeNull();

@@ -1,8 +1,9 @@
 <script lang="ts">
+	import type { ApprovalStatus } from "../../shared/types/wasm";
 	import "../styles/badge.css";
 
 	type Props = {
-		approvalStatus: string;
+		approvalStatus: ApprovalStatus;
 	};
 
 	const { approvalStatus }: Props = $props();
