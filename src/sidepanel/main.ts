@@ -1,6 +1,6 @@
 import { mount } from "svelte";
-import App from "./App.svelte";
 import { chromeSendMessage } from "../adapter/chrome/message.adapter";
+import App from "./App.svelte";
 import { createAuthUseCase } from "./usecase/auth.usecase";
 
 const target = document.getElementById("app");

@@ -4,7 +4,7 @@ import type { AuthPort } from "../../domain/ports/auth.port";
 import type { AuthToken } from "../../shared/types/auth";
 import { AuthError } from "../../shared/types/auth";
 import type { AuthMessage, AuthResponse } from "../../shared/types/messages";
-import { setupChromeMock, resetChromeMock, getChromeMock } from "../mocks/chrome.mock";
+import { getChromeMock, resetChromeMock, setupChromeMock } from "../mocks/chrome.mock";
 
 function createMockAuth(): {
 	[K in keyof AuthPort]: ReturnType<typeof vi.fn>;
@@ -180,7 +180,11 @@ describe("createMessageHandler", () => {
 			const listener = getChromeMock().runtime.onMessage.addListener.mock.calls[0][0];
 
 			const sendResponse = vi.fn();
-			const result = listener({ type: "UNKNOWN_TYPE" }, { id: getChromeMock().runtime.id }, sendResponse);
+			const result = listener(
+				{ type: "UNKNOWN_TYPE" },
+				{ id: getChromeMock().runtime.id },
+				sendResponse,
+			);
 
 			expect(result).toBeUndefined();
 			expect(sendResponse).not.toHaveBeenCalled();

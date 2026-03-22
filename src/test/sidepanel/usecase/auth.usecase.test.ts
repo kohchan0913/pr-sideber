@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-	createAuthUseCase,
-} from "../../../sidepanel/usecase/auth.usecase";
 import type { SendMessage } from "../../../shared/ports/message.port";
 import type { AuthResponse } from "../../../shared/types/messages";
+import { createAuthUseCase } from "../../../sidepanel/usecase/auth.usecase";
 
 describe("auth usecase", () => {
 	let mockSendMessage: ReturnType<typeof vi.fn<SendMessage>>;
