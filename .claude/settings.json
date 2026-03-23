@@ -9,9 +9,7 @@
 			"Bash(gh label:*)",
 			"Bash(gh auth status:*)",
 			"Bash(gh api graphql:*)",
-			"Bash(gh api repos/*/*/issues:*)",
 			"Bash(gh api /repos/*/*/issues:*)",
-			"Bash(gh api -X DELETE repos/*/*/issues:*)",
 			"Bash(gh api -X DELETE /repos/*/*/issues:*)"
 		],
 		"deny": [
@@ -28,8 +26,8 @@
 			"Bash(tail .envrc)",
 			"Bash(source .envrc)",
 			"Bash(grep .envrc)",
-			"Bash(echo $GH_TOKEN)",
-			"Bash(echo $GH_)",
+			"Bash(*$GH_*)",
+			"Bash(*${GH_*)",
 			"Bash(printenv)",
 			"Bash(env | grep)",
 			"Bash(direnv exec)",
