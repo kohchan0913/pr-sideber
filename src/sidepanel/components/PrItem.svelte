@@ -3,6 +3,7 @@
 	import { safeUrl } from "../../shared/utils/url";
 	import ApprovalBadge from "./ApprovalBadge.svelte";
 	import CiBadge from "./CiBadge.svelte";
+	import MergeableBadge from "./MergeableBadge.svelte";
 	import DraftBadge from "./DraftBadge.svelte";
 	import RelativeTime from "./RelativeTime.svelte";
 
@@ -27,6 +28,7 @@
 		{#if !pr.isDraft}
 			<ApprovalBadge approvalStatus={pr.approvalStatus} />
 			<CiBadge ciStatus={pr.ciStatus} />
+			<MergeableBadge mergeableStatus={pr.mergeableStatus} />
 		{/if}
 	</div>
 </div>

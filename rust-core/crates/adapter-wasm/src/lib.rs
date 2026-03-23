@@ -95,7 +95,8 @@ mod tests {
                                 "additions": 10,
                                 "deletions": 5,
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -152,7 +153,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -171,7 +173,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-03T00:00:00Z"
+                                "updatedAt": "2026-01-03T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
