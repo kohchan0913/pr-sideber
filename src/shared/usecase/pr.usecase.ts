@@ -10,13 +10,13 @@ export function createPrUseCase(
 	prProcessor: PrProcessorPort,
 	storage?: StoragePort,
 ) {
-	async function fetchPrs(login: string): Promise<ProcessedPrsResult & { hasMore: boolean }> {
+	async function fetchPrs(): Promise<ProcessedPrsResult & { hasMore: boolean }> {
 		const response = await sendMessage("FETCH_PRS");
 		if (!response.ok) {
 			throw new Error(response.error.message);
 		}
 		const raw: FetchRawPullRequestsResult = response.data;
-		const processed = await prProcessor.processPullRequests(raw.rawJson, login);
+		const processed = await prProcessor.processPullRequests(raw.rawJson);
 		const result = { ...processed, hasMore: raw.hasMore };
 
 		if (storage) {

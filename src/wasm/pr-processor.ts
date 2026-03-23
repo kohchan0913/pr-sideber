@@ -9,9 +9,9 @@ function isProcessedPrsResult(value: unknown): value is ProcessedPrsResult {
 }
 
 export class WasmPrProcessor implements PrProcessorPort {
-	async processPullRequests(rawJson: string, login: string): Promise<ProcessedPrsResult> {
+	async processPullRequests(rawJson: string): Promise<ProcessedPrsResult> {
 		await initializeWasm();
-		const result: unknown = wasmProcessPullRequests(rawJson, login);
+		const result: unknown = wasmProcessPullRequests(rawJson);
 		if (!isProcessedPrsResult(result)) {
 			throw new Error("WASM processPullRequests returned unexpected structure");
 		}

@@ -35,13 +35,12 @@ fn to_pr_list_dto(prs: Vec<domain::entity::PullRequest>) -> PrListDto {
 ///
 /// # Arguments
 /// * `raw_json` - GitHub GraphQL API のレスポンス JSON 文字列
-/// * `login` - WASM API 互換性のために残しているが、分類には使用しない
 ///
 /// # Returns
 /// * `my_prs` - 自分が author の PR リスト (JsValue にシリアライズ)
 /// * `review_requests` - レビューリクエストされた PR リスト (JsValue にシリアライズ)
 #[wasm_bindgen(js_name = "processPullRequests")]
-pub fn process_pull_requests(raw_json: &str, _login: &str) -> Result<JsValue, JsError> {
+pub fn process_pull_requests(raw_json: &str) -> Result<JsValue, JsError> {
     let parsed =
         parser::parse_pull_request_nodes(raw_json).map_err(|e| JsError::new(&e.to_string()))?;
 
