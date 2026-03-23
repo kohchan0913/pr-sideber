@@ -1,25 +1,27 @@
 <script lang="ts">
 	import "../styles/badge.css";
 
-	type Props = {
+	type Props = Readonly<{
 		sizeLabel: string;
+		additions: number;
+		deletions: number;
+	}>;
+
+	const { sizeLabel, additions, deletions }: Props = $props();
+
+	const cssClassMap: Record<string, string> = {
+		XS: "size-xs",
+		S: "size-s",
+		M: "size-m",
+		L: "size-l",
+		XL: "size-xl",
 	};
 
-	const { sizeLabel }: Props = $props();
-
-	const config: Record<string, { cssClass: string; label: string }> = {
-		XS: { cssClass: "size-xs", label: "XS" },
-		S: { cssClass: "size-s", label: "S" },
-		M: { cssClass: "size-m", label: "M" },
-		L: { cssClass: "size-l", label: "L" },
-		XL: { cssClass: "size-xl", label: "XL" },
-	};
-
-	const resolved = $derived(sizeLabel ? config[sizeLabel] : undefined);
+	const cssClass = $derived(sizeLabel ? cssClassMap[sizeLabel] : undefined);
 </script>
 
-{#if resolved}
-	<span class="size-badge {resolved.cssClass}">{resolved.label}</span>
+{#if cssClass}
+	<span class="size-badge {cssClass}">+{additions} -{deletions}</span>
 {/if}
 
 <style>
