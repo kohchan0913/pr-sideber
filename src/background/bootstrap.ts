@@ -30,11 +30,11 @@ export function initializeApp(): AppServices {
 		}
 		return token.accessToken;
 	});
-	const handler = createMessageHandler({ auth, githubApi });
+	const prProcessor = new WasmPrProcessor();
+	const handler = createMessageHandler({ auth, githubApi, prProcessor });
 	chrome.runtime.onMessage.addListener(handler);
 
 	const alarm = new ChromeAlarmAdapter();
-	const prProcessor = new WasmPrProcessor();
 	const autoRefresh = createAutoRefreshUseCase({
 		alarm,
 		storage,
@@ -42,6 +42,16 @@ export function initializeApp(): AppServices {
 			const raw = await githubApi.fetchPullRequests();
 			const processed = await prProcessor.processPullRequests(raw.rawJson, "@me");
 			return { ...processed, hasMore: raw.hasMore };
+		},
+		notifyCacheUpdated: async (lastUpdatedAt: string) => {
+			try {
+				await chrome.runtime.sendMessage({
+					type: "CACHE_UPDATED",
+					lastUpdatedAt,
+				});
+			} catch {
+				// Side Panel が閉じている場合の "Receiving end does not exist" は正常系
+			}
 		},
 	});
 	autoRefresh.start().catch((err: unknown) => {
@@ -67,6 +77,6 @@ export function initializeApp(): AppServices {
 		}
 	};
 
-	services = { auth, githubApi, dispose };
+	services = { auth, githubApi, prProcessor, dispose };
 	return services;
 }

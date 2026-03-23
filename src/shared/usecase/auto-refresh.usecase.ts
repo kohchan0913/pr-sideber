@@ -7,11 +7,12 @@ type AutoRefreshDeps = {
 	readonly alarm: AlarmPort;
 	readonly storage: StoragePort;
 	readonly fetchAndProcessPrs: () => Promise<ProcessedPrsResult & { hasMore: boolean }>;
+	readonly notifyCacheUpdated: (lastUpdatedAt: string) => Promise<void>;
 };
 
 export function createAutoRefreshUseCase(deps: AutoRefreshDeps) {
 	const ALARM_NAME = "pr-refresh";
-	const INTERVAL_MINUTES = 5;
+	const INTERVAL_MINUTES = 2;
 
 	let started = false;
 	let unsubscribe: (() => void) | null = null;
@@ -47,10 +48,18 @@ export function createAutoRefreshUseCase(deps: AutoRefreshDeps) {
 
 	async function refresh(): Promise<void> {
 		const data = await deps.fetchAndProcessPrs();
+		const lastUpdatedAt = new Date().toISOString();
 		await deps.storage.set(PR_CACHE_KEY, {
 			data,
-			lastUpdatedAt: new Date().toISOString(),
+			lastUpdatedAt,
 		});
+		try {
+			await deps.notifyCacheUpdated(lastUpdatedAt);
+		} catch (err: unknown) {
+			if (import.meta.env.DEV) {
+				console.error("[auto-refresh] notifyCacheUpdated failed:", err);
+			}
+		}
 	}
 
 	async function getCachedPrs(): Promise<CachedPrData | null> {
