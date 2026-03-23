@@ -8,6 +8,8 @@ type AutoRefreshDeps = {
 	readonly storage: StoragePort;
 	readonly fetchAndProcessPrs: () => Promise<ProcessedPrsResult & { hasMore: boolean }>;
 	readonly notifyCacheUpdated: (lastUpdatedAt: string) => Promise<void>;
+	/** 非同期処理が必要な場合は呼び出し側で .catch() すること（同期例外のみ捕捉される） */
+	readonly onRefreshComplete?: (data: ProcessedPrsResult & { hasMore: boolean }) => void;
 };
 
 export function createAutoRefreshUseCase(deps: AutoRefreshDeps) {
@@ -58,6 +60,15 @@ export function createAutoRefreshUseCase(deps: AutoRefreshDeps) {
 		} catch (err: unknown) {
 			if (import.meta.env.DEV) {
 				console.error("[auto-refresh] notifyCacheUpdated failed:", err);
+			}
+		}
+		if (deps.onRefreshComplete) {
+			try {
+				deps.onRefreshComplete(data);
+			} catch (err: unknown) {
+				if (import.meta.env.DEV) {
+					console.error("[auto-refresh] onRefreshComplete callback error:", err);
+				}
 			}
 		}
 	}

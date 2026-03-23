@@ -1,4 +1,3 @@
-pub mod classify;
 pub mod determine;
 pub mod process;
 pub mod sort;

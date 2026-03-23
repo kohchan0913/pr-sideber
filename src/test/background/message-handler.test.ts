@@ -277,4 +277,86 @@ describe("createMessageHandler", () => {
 			expect(response).not.toHaveProperty("data.accessToken");
 		});
 	});
+
+	describe("UPDATE_BADGE", () => {
+		let mockBadge: { updateBadge: ReturnType<typeof vi.fn> };
+
+		beforeEach(() => {
+			mockBadge = { updateBadge: vi.fn().mockResolvedValue(undefined) };
+			// badge は未実装のフィールド。RED フェーズでは型定義を変更しないため cast で追加する
+			services = { auth: mockAuth, badge: mockBadge } as unknown as AppServices;
+			handler = createMessageHandler(services);
+		});
+
+		// NOTE: RED フェーズでは MESSAGE_TYPES に UPDATE_BADGE がないため isRequestMessage で弾かれタイムアウトで失敗する。GREEN フェーズで MESSAGE_TYPES 拡張後に正しい理由で失敗→通過する
+		it("should call badge.updateBadge with reviewRequestCount", async () => {
+			const sendResponse = vi.fn();
+
+			handler(
+				{ type: "UPDATE_BADGE", payload: { reviewRequestCount: 3 } },
+				createTrustedSender(),
+				sendResponse,
+			);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockBadge.updateBadge).toHaveBeenCalledWith(3);
+			const response = sendResponse.mock.calls[0][0];
+			expect(response).toEqual({ ok: true, data: undefined });
+		});
+
+		// NOTE: RED フェーズでは MESSAGE_TYPES に UPDATE_BADGE がないため isRequestMessage で弾かれタイムアウトで失敗する。GREEN フェーズで MESSAGE_TYPES 拡張後に正しい理由で失敗→通過する
+		it("should respond with error when badge.updateBadge throws", async () => {
+			mockBadge.updateBadge.mockRejectedValue(new Error("Badge update failed"));
+			const sendResponse = vi.fn();
+
+			handler(
+				{ type: "UPDATE_BADGE", payload: { reviewRequestCount: 5 } },
+				createTrustedSender(),
+				sendResponse,
+			);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			const response = sendResponse.mock.calls[0][0];
+			expect(response.ok).toBe(false);
+			expect(response.error.code).toBe("UPDATE_BADGE_ERROR");
+		});
+
+		// NOTE: RED フェーズでは MESSAGE_TYPES に UPDATE_BADGE がないため isRequestMessage で弾かれタイムアウトで失敗する。GREEN フェーズで MESSAGE_TYPES 拡張後に正しい理由で失敗→通過する
+		it("should respond with error when reviewRequestCount is negative", async () => {
+			const sendResponse = vi.fn();
+
+			handler(
+				{ type: "UPDATE_BADGE", payload: { reviewRequestCount: -1 } },
+				createTrustedSender(),
+				sendResponse,
+			);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			const response = sendResponse.mock.calls[0][0];
+			expect(response.ok).toBe(false);
+		});
+
+		// NOTE: RED フェーズでは MESSAGE_TYPES に UPDATE_BADGE がないため isRequestMessage で弾かれタイムアウトで失敗する。GREEN フェーズで MESSAGE_TYPES 拡張後に正しい理由で失敗→通過する
+		it("should respond with error when payload is missing", async () => {
+			const sendResponse = vi.fn();
+
+			handler({ type: "UPDATE_BADGE" }, createTrustedSender(), sendResponse);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			const response = sendResponse.mock.calls[0][0];
+			expect(response.ok).toBe(false);
+		});
+	});
 });

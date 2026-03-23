@@ -45,10 +45,17 @@ function createMockPrProcessor(): {
 	};
 }
 
+function createMockBadge() {
+	return {
+		updateBadge: vi.fn().mockResolvedValue(undefined),
+	};
+}
+
 describe("message-handler FETCH_PRS", () => {
 	let mockAuth: ReturnType<typeof createMockAuth>;
 	let mockGitHubApi: ReturnType<typeof createMockGitHubApi>;
 	let mockPrProcessor: ReturnType<typeof createMockPrProcessor>;
+	let mockBadge: ReturnType<typeof createMockBadge>;
 	let handler: ReturnType<typeof createMessageHandler>;
 
 	beforeEach(() => {
@@ -56,10 +63,12 @@ describe("message-handler FETCH_PRS", () => {
 		mockAuth = createMockAuth();
 		mockGitHubApi = createMockGitHubApi();
 		mockPrProcessor = createMockPrProcessor();
+		mockBadge = createMockBadge();
 		handler = createMessageHandler({
 			auth: mockAuth,
 			githubApi: mockGitHubApi,
 			prProcessor: mockPrProcessor,
+			badge: mockBadge,
 		});
 	});
 
@@ -106,10 +115,7 @@ describe("message-handler FETCH_PRS", () => {
 		});
 
 		// prProcessor.processPullRequests が呼ばれたことを検証
-		expect(mockPrProcessor.processPullRequests).toHaveBeenCalledWith(
-			fetchResult.rawJson,
-			expect.any(String),
-		);
+		expect(mockPrProcessor.processPullRequests).toHaveBeenCalledWith(fetchResult.rawJson);
 
 		const response = sendResponse.mock.calls[0][0];
 		expect(response.ok).toBe(true);

@@ -158,25 +158,6 @@ describe("MainScreen", () => {
 		vi.useRealTimers();
 	});
 
-	it("should clear setInterval when component is unmounted", async () => {
-		vi.useFakeTimers();
-		const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
-
-		component = mount(MainScreen, {
-			target: document.body,
-			props: createDefaultProps(),
-		});
-		await tick();
-
-		unmount(component);
-		component = undefined as unknown as ReturnType<typeof mount>;
-
-		expect(clearIntervalSpy).toHaveBeenCalled();
-
-		clearIntervalSpy.mockRestore();
-		vi.useRealTimers();
-	});
-
 	it("should call unsubscribe when unmounted", async () => {
 		const mockUnsubscribe = vi.fn();
 		const mockSubscribe = vi.fn((_callback: (message: unknown) => void) => mockUnsubscribe);

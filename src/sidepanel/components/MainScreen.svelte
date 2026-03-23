@@ -3,8 +3,8 @@
 	import type { ProcessedPrsResult } from "../../domain/ports/pr-processor.port";
 	import type { CachedPrData } from "../../shared/types/cache";
 	import { isCacheUpdatedEvent } from "../../shared/types/events";
-	import { formatRelativeTime } from "../../shared/utils/time";
 	import LogoutButton from "./LogoutButton.svelte";
+	import RelativeTime from "./RelativeTime.svelte";
 	import PrSection from "./PrSection.svelte";
 
 	type Props = {
@@ -21,7 +21,6 @@
 	let error = $state<string | null>(null);
 	let data = $state<(ProcessedPrsResult & { hasMore: boolean }) | null>(null);
 	let lastUpdatedAt = $state<string | undefined>(undefined);
-	let tick = $state(0);
 
 	async function loadPrs(): Promise<void> {
 		loading = true;
@@ -82,7 +81,7 @@
 		};
 	});
 
-	// CACHE_UPDATED リスナーと formatRelativeTime の定期更新
+	// CACHE_UPDATED リスナー
 	$effect(() => {
 		function onMessage(message: unknown): void {
 			if (isCacheUpdatedEvent(message)) {
@@ -102,13 +101,9 @@
 		}
 
 		const unsubscribe = subscribeToMessages(onMessage);
-		const interval = setInterval(() => {
-			tick += 1;
-		}, 60_000);
 
 		return () => {
 			unsubscribe();
-			clearInterval(interval);
 		};
 	});
 </script>
@@ -133,8 +128,7 @@
 		</div>
 		<div class="header-right">
 			{#if lastUpdatedAt}
-				<!-- tick を参照することで setInterval ごとに再レンダリングを発火させる -->
-				<span class="last-updated">{tick >= 0 ? formatRelativeTime(lastUpdatedAt) : ""}</span>
+				<span class="last-updated"><RelativeTime dateStr={lastUpdatedAt} /></span>
 			{/if}
 			<LogoutButton {onLogout} />
 		</div>

@@ -9,6 +9,7 @@ const ERROR_MESSAGES: Record<MessageType, string> = {
 	AUTH_DEVICE_CODE: "Device code request failed",
 	AUTH_DEVICE_POLL: "Device polling failed",
 	FETCH_PRS: "Failed to fetch pull requests",
+	UPDATE_BADGE: "Failed to update badge",
 };
 
 /** deviceCode の長さ制限 */
@@ -16,7 +17,7 @@ const DEVICE_CODE_MIN_LENGTH = 8;
 const DEVICE_CODE_MAX_LENGTH = 256;
 
 export function createMessageHandler(
-	services: Pick<AppServices, "auth" | "githubApi" | "prProcessor">,
+	services: Pick<AppServices, "auth" | "githubApi" | "prProcessor" | "badge">,
 ) {
 	return (
 		message: unknown,
@@ -38,7 +39,7 @@ export function createMessageHandler(
 }
 
 async function handleMessage(
-	services: Pick<AppServices, "auth" | "githubApi" | "prProcessor">,
+	services: Pick<AppServices, "auth" | "githubApi" | "prProcessor" | "badge">,
 	message: RequestMessage<MessageType>,
 	sendResponse: (response: ResponseMessage<MessageType>) => void,
 ): Promise<void> {
@@ -81,8 +82,24 @@ async function handleMessage(
 			}
 			case "FETCH_PRS": {
 				const raw = await services.githubApi.fetchPullRequests();
-				const processed = await services.prProcessor.processPullRequests(raw.rawJson, "@me");
+				const processed = await services.prProcessor.processPullRequests(raw.rawJson);
 				sendResponse({ ok: true, data: { ...processed, hasMore: raw.hasMore } });
+				break;
+			}
+			case "UPDATE_BADGE": {
+				const msg = message as RequestMessage<"UPDATE_BADGE">;
+				const { reviewRequestCount } = msg.payload;
+
+				if (!Number.isInteger(reviewRequestCount) || reviewRequestCount < 0) {
+					sendResponse({
+						ok: false,
+						error: { code: "UPDATE_BADGE_ERROR", message: "Invalid review request count" },
+					});
+					break;
+				}
+
+				await services.badge.updateBadge(reviewRequestCount);
+				sendResponse({ ok: true, data: undefined });
 				break;
 			}
 			default: {
