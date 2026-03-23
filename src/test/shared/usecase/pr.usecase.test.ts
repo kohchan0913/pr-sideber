@@ -66,10 +66,10 @@ describe("pr usecase", () => {
 			mockSendMessage.mockResolvedValue(response);
 
 			const useCase = createPrUseCase(mockSendMessage as SendMessage, mockPrProcessor, mockStorage);
-			const result = await useCase.fetchPrs("testuser");
+			const result = await useCase.fetchPrs();
 
 			expect(mockSendMessage).toHaveBeenCalledWith("FETCH_PRS");
-			expect(mockPrProcessor.processPullRequests).toHaveBeenCalledWith('{"data":{}}', "testuser");
+			expect(mockPrProcessor.processPullRequests).toHaveBeenCalledWith('{"data":{}}');
 			expect(result.myPrs).toEqual(mockProcessedResult.myPrs);
 			expect(result.reviewRequests).toEqual(mockProcessedResult.reviewRequests);
 			expect(result.hasMore).toBe(false);
@@ -84,7 +84,7 @@ describe("pr usecase", () => {
 
 			const useCase = createPrUseCase(mockSendMessage as SendMessage, mockPrProcessor, mockStorage);
 
-			await expect(useCase.fetchPrs("testuser")).rejects.toThrow("Failed to fetch pull requests");
+			await expect(useCase.fetchPrs()).rejects.toThrow("Failed to fetch pull requests");
 		});
 
 		it("should propagate error when sendMessage rejects", async () => {
@@ -92,7 +92,7 @@ describe("pr usecase", () => {
 
 			const useCase = createPrUseCase(mockSendMessage as SendMessage, mockPrProcessor, mockStorage);
 
-			await expect(useCase.fetchPrs("testuser")).rejects.toThrow("Network error");
+			await expect(useCase.fetchPrs()).rejects.toThrow("Network error");
 		});
 
 		it("should return hasMore: true when API indicates more results", async () => {
@@ -101,7 +101,7 @@ describe("pr usecase", () => {
 			mockSendMessage.mockResolvedValue(response);
 
 			const useCase = createPrUseCase(mockSendMessage as SendMessage, mockPrProcessor, mockStorage);
-			const result = await useCase.fetchPrs("testuser");
+			const result = await useCase.fetchPrs();
 
 			expect(result.hasMore).toBe(true);
 		});
@@ -112,7 +112,7 @@ describe("pr usecase", () => {
 			mockSendMessage.mockResolvedValue(response);
 
 			const useCase = createPrUseCase(mockSendMessage as SendMessage, mockPrProcessor, mockStorage);
-			await useCase.fetchPrs("testuser");
+			await useCase.fetchPrs();
 
 			expect(mockStorage.set).toHaveBeenCalledWith(PR_CACHE_KEY, {
 				data: { ...mockProcessedResult, hasMore: false },
@@ -126,7 +126,7 @@ describe("pr usecase", () => {
 			mockSendMessage.mockResolvedValue(response);
 
 			const useCase = createPrUseCase(mockSendMessage as SendMessage, mockPrProcessor, mockStorage);
-			await useCase.fetchPrs("testuser");
+			await useCase.fetchPrs();
 
 			const savedData = mockStorage.set.mock.calls[0][1] as { lastUpdatedAt: string };
 			expect(savedData.lastUpdatedAt).toBe("2026-03-22T12:00:00.000Z");
@@ -142,7 +142,7 @@ describe("pr usecase", () => {
 
 			const useCase = createPrUseCase(mockSendMessage as SendMessage, mockPrProcessor, mockStorage);
 
-			await expect(useCase.fetchPrs("testuser")).rejects.toThrow("Failed");
+			await expect(useCase.fetchPrs()).rejects.toThrow("Failed");
 			expect(mockStorage.set).not.toHaveBeenCalled();
 		});
 
@@ -152,7 +152,7 @@ describe("pr usecase", () => {
 			mockSendMessage.mockResolvedValue(response);
 
 			const useCase = createPrUseCase(mockSendMessage as SendMessage, mockPrProcessor);
-			const result = await useCase.fetchPrs("testuser");
+			const result = await useCase.fetchPrs();
 
 			expect(result.myPrs).toEqual(mockProcessedResult.myPrs);
 			expect(result.hasMore).toBe(false);
@@ -165,7 +165,7 @@ describe("pr usecase", () => {
 			mockStorage.set.mockRejectedValue(new Error("Storage full"));
 
 			const useCase = createPrUseCase(mockSendMessage as SendMessage, mockPrProcessor, mockStorage);
-			const result = await useCase.fetchPrs("testuser");
+			const result = await useCase.fetchPrs();
 
 			expect(result.myPrs).toEqual(mockProcessedResult.myPrs);
 		});

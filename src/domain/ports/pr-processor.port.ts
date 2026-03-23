@@ -30,8 +30,5 @@ export type ProcessedPrsResult = {
 };
 
 export interface PrProcessorPort {
-	processPullRequests(
-		rawJson: string,
-		login: string,
-	): ProcessedPrsResult | Promise<ProcessedPrsResult>;
+	processPullRequests(rawJson: string): ProcessedPrsResult | Promise<ProcessedPrsResult>;
 }

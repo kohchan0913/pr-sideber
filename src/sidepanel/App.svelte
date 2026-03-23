@@ -51,7 +51,7 @@
 		<p>Loading...</p>
 	</div>
 {:else if authenticated}
-	<MainScreen onLogout={handleLogout} fetchPrs={() => prUseCase.fetchPrs("@me")} getCachedPrs={() => prUseCase.getCachedPrs()} />
+	<MainScreen onLogout={handleLogout} fetchPrs={() => prUseCase.fetchPrs()} getCachedPrs={() => prUseCase.getCachedPrs()} />
 {:else}
 	<LoginScreen controller={deviceFlowController} />
 {/if}
