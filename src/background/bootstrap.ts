@@ -63,6 +63,7 @@ export function initializeApp(): AppServices {
 			auth.dispose();
 		} finally {
 			chrome.runtime.onMessage.removeListener(handler);
+			services = null; // dispose 後は再初期化を許可する
 		}
 	};
 

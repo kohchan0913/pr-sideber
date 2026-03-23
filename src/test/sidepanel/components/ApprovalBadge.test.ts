@@ -1,6 +1,12 @@
 import { mount, unmount } from "svelte";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ApprovalStatus } from "../../../shared/types/wasm";
 import ApprovalBadge from "../../../sidepanel/components/ApprovalBadge.svelte";
+
+/** テスト専用: 型チェックを迂回して不正値を注入する */
+function unsafeCast<T>(value: unknown): T {
+	return value as T;
+}
 
 describe("ApprovalBadge", () => {
 	let component: ReturnType<typeof mount>;
@@ -57,7 +63,7 @@ describe("ApprovalBadge", () => {
 	it("should render nothing when status is an empty string", () => {
 		component = mount(ApprovalBadge, {
 			target: document.body,
-			props: { approvalStatus: "" },
+			props: { approvalStatus: unsafeCast<ApprovalStatus>("") },
 		});
 		const badge = document.querySelector(".badge");
 		expect(badge).toBeNull();
@@ -66,7 +72,7 @@ describe("ApprovalBadge", () => {
 	it("should render nothing when status is an unknown value", () => {
 		component = mount(ApprovalBadge, {
 			target: document.body,
-			props: { approvalStatus: "InvalidValue" },
+			props: { approvalStatus: unsafeCast<ApprovalStatus>("InvalidValue") },
 		});
 		const badge = document.querySelector(".badge");
 		expect(badge).toBeNull();
