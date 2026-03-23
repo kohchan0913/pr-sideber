@@ -18,6 +18,11 @@ case "$FILE_PATH" in
   *) exit 0 ;;
 esac
 
+# biome.json の ignore 対象 (.claude/) はスキップ
+case "$FILE_PATH" in
+  .claude/*|*/.claude/*) exit 0 ;;
+esac
+
 # ファイルが存在しなければスキップ
 if [ ! -f "$FILE_PATH" ]; then
   exit 0
