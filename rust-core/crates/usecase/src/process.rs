@@ -24,7 +24,7 @@ pub fn process_pull_requests(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::status::{ApprovalStatus, CiStatus};
+    use domain::status::{ApprovalStatus, CiStatus, MergeableStatus};
 
     fn make_pr(author: &str, number: u32, updated_at: &str) -> PullRequest {
         PullRequest::new(
@@ -37,6 +37,7 @@ mod tests {
             false,
             ApprovalStatus::Approved,
             CiStatus::Passed,
+            MergeableStatus::Unknown,
             10,
             5,
             "2026-01-01T00:00:00Z".to_string(),

@@ -25,6 +25,7 @@ describe("pr usecase", () => {
 					isDraft: false,
 					approvalStatus: "Approved",
 					ciStatus: "Passed",
+					mergeableStatus: "Unknown",
 					additions: 10,
 					deletions: 5,
 					createdAt: "2026-03-20T00:00:00Z",

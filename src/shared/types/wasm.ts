@@ -7,6 +7,7 @@ export interface Greeting {
 export type {
 	ApprovalStatus,
 	CiStatus,
+	MergeableStatus,
 	PrItemDto,
 	PrListDto,
 } from "../../domain/ports/pr-processor.port";

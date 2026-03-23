@@ -2,7 +2,7 @@ use serde::Serialize;
 use tsify_next::Tsify;
 
 use domain::entity::PullRequest;
-use domain::status::{ApprovalStatus, CiStatus};
+use domain::status::{ApprovalStatus, CiStatus, MergeableStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Tsify)]
 #[cfg_attr(test, derive(serde::Deserialize))]
@@ -18,6 +18,7 @@ pub struct PrItemDto {
     pub is_draft: bool,
     pub approval_status: ApprovalStatus,
     pub ci_status: CiStatus,
+    pub mergeable_status: MergeableStatus,
     pub additions: u32,
     pub deletions: u32,
     /// ISO 8601 形式の文字列。chrono 不使用で WASM バイナリサイズを削減。
@@ -38,6 +39,7 @@ impl From<PullRequest> for PrItemDto {
             is_draft,
             approval_status,
             ci_status,
+            mergeable_status,
             additions,
             deletions,
             created_at,
@@ -53,6 +55,7 @@ impl From<PullRequest> for PrItemDto {
             is_draft,
             approval_status,
             ci_status,
+            mergeable_status,
             additions,
             deletions,
             created_at,
@@ -75,7 +78,7 @@ pub struct PrListDto {
 #[cfg(test)]
 mod tests {
     use crate::dto::{PrItemDto, PrListDto};
-    use domain::status::{ApprovalStatus, CiStatus};
+    use domain::status::{ApprovalStatus, CiStatus, MergeableStatus};
 
     fn make_pr_item() -> PrItemDto {
         PrItemDto {
@@ -88,6 +91,7 @@ mod tests {
             is_draft: false,
             approval_status: ApprovalStatus::Approved,
             ci_status: CiStatus::Passed,
+            mergeable_status: MergeableStatus::Unknown,
             additions: 100,
             deletions: 20,
             created_at: "2026-01-01T00:00:00Z".to_string(),
@@ -178,6 +182,7 @@ mod tests {
             true,
             ApprovalStatus::ChangesRequested,
             CiStatus::Failed,
+            MergeableStatus::Conflicting,
             250,
             80,
             "2026-03-01T12:00:00Z".to_string(),
@@ -196,6 +201,7 @@ mod tests {
         assert!(dto.is_draft);
         assert_eq!(dto.approval_status, ApprovalStatus::ChangesRequested);
         assert_eq!(dto.ci_status, CiStatus::Failed);
+        assert_eq!(dto.mergeable_status, MergeableStatus::Conflicting);
         assert_eq!(dto.additions, 250);
         assert_eq!(dto.deletions, 80);
         assert_eq!(dto.created_at, "2026-03-01T12:00:00Z");
@@ -229,6 +235,7 @@ mod tests {
                 false,
                 approval,
                 ci,
+                MergeableStatus::Unknown,
                 10,
                 5,
                 "2026-03-20T00:00:00Z".to_string(),

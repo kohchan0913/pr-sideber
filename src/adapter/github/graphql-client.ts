@@ -55,6 +55,7 @@ fragment PrFields on PullRequest {
   }
   createdAt
   updatedAt
+  mergeable
 }`;
 
 const PULL_REQUESTS_QUERY = `

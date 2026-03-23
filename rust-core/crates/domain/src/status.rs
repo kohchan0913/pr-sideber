@@ -26,6 +26,16 @@ pub enum CiStatus {
     None,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MergeableStatus {
+    /// マージ可能。コンフリクトなし。
+    Mergeable,
+    /// コンフリクトあり。
+    Conflicting,
+    /// マージ可能性が未確定 (GitHub が計算中)。
+    Unknown,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,6 +89,31 @@ mod tests {
         let original = CiStatus::Failed;
         let copied = original;
         let cloned = original.clone();
+        assert_eq!(original, copied);
+        assert_eq!(original, cloned);
+    }
+
+    #[test]
+    fn mergeable_status_serde_roundtrip() {
+        let variants = [
+            MergeableStatus::Mergeable,
+            MergeableStatus::Conflicting,
+            MergeableStatus::Unknown,
+        ];
+        for variant in &variants {
+            let json = serde_json::to_string(variant).expect("serialize should succeed");
+            let restored: MergeableStatus =
+                serde_json::from_str(&json).expect("deserialize should succeed");
+            assert_eq!(*variant, restored);
+        }
+    }
+
+    #[test]
+    #[allow(clippy::clone_on_copy)]
+    fn mergeable_status_copy_clone() {
+        let original = MergeableStatus::Conflicting;
+        let copied = original; // Copy
+        let cloned = original.clone(); // Clone
         assert_eq!(original, copied);
         assert_eq!(original, cloned);
     }
