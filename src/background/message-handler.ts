@@ -9,13 +9,14 @@ const ERROR_MESSAGES: Record<MessageType, string> = {
 	AUTH_DEVICE_CODE: "Device code request failed",
 	AUTH_DEVICE_POLL: "Device polling failed",
 	FETCH_PRS: "Failed to fetch pull requests",
+	UPDATE_BADGE: "Failed to update badge",
 };
 
 /** deviceCode の長さ制限 */
 const DEVICE_CODE_MIN_LENGTH = 8;
 const DEVICE_CODE_MAX_LENGTH = 256;
 
-export function createMessageHandler(services: Pick<AppServices, "auth" | "githubApi">) {
+export function createMessageHandler(services: Pick<AppServices, "auth" | "githubApi" | "badge">) {
 	return (
 		message: unknown,
 		sender: chrome.runtime.MessageSender,
@@ -36,7 +37,7 @@ export function createMessageHandler(services: Pick<AppServices, "auth" | "githu
 }
 
 async function handleMessage(
-	services: Pick<AppServices, "auth" | "githubApi">,
+	services: Pick<AppServices, "auth" | "githubApi" | "badge">,
 	message: RequestMessage<MessageType>,
 	sendResponse: (response: ResponseMessage<MessageType>) => void,
 ): Promise<void> {
@@ -80,6 +81,23 @@ async function handleMessage(
 			case "FETCH_PRS": {
 				const result = await services.githubApi.fetchPullRequests();
 				sendResponse({ ok: true, data: result });
+				break;
+			}
+			case "UPDATE_BADGE": {
+				// 将来 sidepanel からの手動更新用に予約。現在の主経路は bootstrap.ts の onRefreshComplete コールバック
+				const msg = message as RequestMessage<"UPDATE_BADGE">;
+				const { reviewRequestCount } = msg.payload;
+
+				if (!Number.isInteger(reviewRequestCount) || reviewRequestCount < 0) {
+					sendResponse({
+						ok: false,
+						error: { code: "UPDATE_BADGE_ERROR", message: "Invalid review request count" },
+					});
+					break;
+				}
+
+				await services.badge.updateBadge(reviewRequestCount);
+				sendResponse({ ok: true, data: undefined });
 				break;
 			}
 			default: {

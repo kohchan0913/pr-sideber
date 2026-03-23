@@ -184,6 +184,53 @@ describe("auto-refresh usecase", () => {
 		});
 	});
 
+	describe("onRefreshComplete callback", () => {
+		function createUseCaseWithCallback(
+			onRefreshComplete: (data: ProcessedPrsResult & { hasMore: boolean }) => void,
+		) {
+			// onRefreshComplete は未実装のフィールド。RED フェーズでは型定義を変更しないため cast で渡す
+			const deps = {
+				alarm: mockAlarm,
+				storage: mockStorage,
+				fetchAndProcessPrs: mockFetchAndProcessPrs,
+				onRefreshComplete,
+			} as Parameters<typeof createAutoRefreshUseCase>[0];
+			return createAutoRefreshUseCase(deps);
+		}
+
+		it("should call onRefreshComplete with fetched data after successful refresh", async () => {
+			const onRefreshComplete = vi.fn();
+			const useCase = createUseCaseWithCallback(onRefreshComplete);
+			await useCase.refresh();
+
+			expect(onRefreshComplete).toHaveBeenCalledWith(mockProcessedResult);
+		});
+
+		it("should not call onRefreshComplete when fetch fails", async () => {
+			mockFetchAndProcessPrs.mockRejectedValue(new Error("API error"));
+			const onRefreshComplete = vi.fn();
+			const useCase = createUseCaseWithCallback(onRefreshComplete);
+
+			await expect(useCase.refresh()).rejects.toThrow("API error");
+			expect(onRefreshComplete).not.toHaveBeenCalled();
+		});
+
+		it("should not throw when onRefreshComplete is not provided", async () => {
+			const useCase = createUseCase();
+			await expect(useCase.refresh()).resolves.not.toThrow();
+		});
+
+		it("should not propagate error when onRefreshComplete throws", async () => {
+			const onRefreshComplete = vi.fn().mockImplementation(() => {
+				throw new Error("Callback explosion");
+			});
+			const useCase = createUseCaseWithCallback(onRefreshComplete);
+
+			await expect(useCase.refresh()).resolves.not.toThrow();
+			expect(onRefreshComplete).toHaveBeenCalledWith(mockProcessedResult);
+		});
+	});
+
 	describe("alarm trigger", () => {
 		it("should call refresh when the pr-refresh alarm fires", async () => {
 			const useCase = createUseCase();

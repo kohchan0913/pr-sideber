@@ -7,6 +7,7 @@ export const MESSAGE_TYPES = [
 	"AUTH_DEVICE_CODE",
 	"AUTH_DEVICE_POLL",
 	"FETCH_PRS",
+	"UPDATE_BADGE",
 ] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];
@@ -18,6 +19,7 @@ export type RequestMap = {
 	AUTH_DEVICE_CODE: undefined;
 	AUTH_DEVICE_POLL: { deviceCode: string };
 	FETCH_PRS: undefined;
+	UPDATE_BADGE: { reviewRequestCount: number };
 };
 
 /** メッセージタイプ → レスポンスデータのマッピング */
@@ -27,6 +29,7 @@ export type ResponseDataMap = {
 	AUTH_DEVICE_CODE: DeviceCodeResponse;
 	AUTH_DEVICE_POLL: PollResult;
 	FETCH_PRS: FetchRawPullRequestsResult;
+	UPDATE_BADGE: undefined;
 };
 
 export type MessageError = {

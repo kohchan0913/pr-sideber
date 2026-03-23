@@ -37,6 +37,10 @@ type ChromeMock = {
 			removeListener: ReturnType<typeof vi.fn>;
 		};
 	};
+	action: {
+		setBadgeText: ReturnType<typeof vi.fn>;
+		setBadgeBackgroundColor: ReturnType<typeof vi.fn>;
+	};
 };
 
 let chromeMock: ChromeMock;
@@ -78,6 +82,10 @@ function createChromeMock(): ChromeMock {
 				addListener: vi.fn(),
 				removeListener: vi.fn(),
 			},
+		},
+		action: {
+			setBadgeText: vi.fn(),
+			setBadgeBackgroundColor: vi.fn(),
 		},
 	};
 }
