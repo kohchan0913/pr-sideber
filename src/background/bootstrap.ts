@@ -1,10 +1,12 @@
 import { ChromeAlarmAdapter } from "../adapter/chrome/alarm.adapter";
+import { createChromeBadgeAdapter } from "../adapter/chrome/badge.adapter";
 import { ChromeIdentityAdapter } from "../adapter/chrome/identity.adapter";
 import { createOAuthConfig } from "../adapter/chrome/oauth.config";
 import { ChromeStorageAdapter } from "../adapter/chrome/storage.adapter";
 import { GitHubGraphQLClient } from "../adapter/github/graphql-client";
 import { GitHubApiError } from "../shared/types/errors";
 import { createAutoRefreshUseCase } from "../shared/usecase/auto-refresh.usecase";
+import { createBadgeUseCase } from "../shared/usecase/badge.usecase";
 import { WasmPrProcessor } from "../wasm/pr-processor";
 import { createMessageHandler } from "./message-handler";
 import type { AppServices } from "./types";
@@ -30,7 +32,11 @@ export function initializeApp(): AppServices {
 		}
 		return token.accessToken;
 	});
-	const handler = createMessageHandler({ auth, githubApi });
+
+	const badgeAdapter = createChromeBadgeAdapter();
+	const badge = createBadgeUseCase(badgeAdapter);
+
+	const handler = createMessageHandler({ auth, githubApi, badge });
 	chrome.runtime.onMessage.addListener(handler);
 
 	const alarm = new ChromeAlarmAdapter();
@@ -42,6 +48,13 @@ export function initializeApp(): AppServices {
 			const raw = await githubApi.fetchPullRequests();
 			const processed = await prProcessor.processPullRequests(raw.rawJson, "@me");
 			return { ...processed, hasMore: raw.hasMore };
+		},
+		onRefreshComplete: (data) => {
+			badge.updateBadge(data.reviewRequests.totalCount).catch((err: unknown) => {
+				if (import.meta.env.DEV) {
+					console.error("[bootstrap] Failed to update badge:", err);
+				}
+			});
 		},
 	});
 	autoRefresh.start().catch((err: unknown) => {
@@ -67,6 +80,6 @@ export function initializeApp(): AppServices {
 		}
 	};
 
-	services = { auth, githubApi, dispose };
+	services = { auth, githubApi, badge, dispose };
 	return services;
 }
