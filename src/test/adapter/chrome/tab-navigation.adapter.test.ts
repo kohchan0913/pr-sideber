@@ -47,6 +47,18 @@ describe("TabNavigationAdapter", () => {
 			).rejects.toThrow();
 		});
 
+		it("should throw when url does not start with https://github.com/", async () => {
+			await expect(adapter.navigateCurrentTab("javascript:alert(1)")).rejects.toThrow(
+				"URL must start with https://github.com/",
+			);
+		});
+
+		it("should throw for http://github.com/ (non-https)", async () => {
+			await expect(adapter.navigateCurrentTab("http://github.com/owner/repo")).rejects.toThrow(
+				"URL must start with https://github.com/",
+			);
+		});
+
 		it("should propagate error when chrome.tabs.update rejects", async () => {
 			const mock = getChromeMock();
 			mock.tabs.query.mockResolvedValue([{ id: 42, url: "https://github.com/old" }]);
@@ -159,6 +171,85 @@ describe("TabNavigationAdapter", () => {
 			expect(mock.tabs.create).toHaveBeenCalledWith({
 				url: "https://github.com/owner/repo/pull/42",
 			});
+		});
+
+		it("should throw when url does not start with https://github.com/", async () => {
+			await expect(adapter.openNewTab("javascript:alert(1)")).rejects.toThrow(
+				"URL must start with https://github.com/",
+			);
+		});
+
+		it("should throw for http://github.com/ (non-https)", async () => {
+			await expect(adapter.openNewTab("http://github.com/owner/repo")).rejects.toThrow(
+				"URL must start with https://github.com/",
+			);
+		});
+	});
+
+	describe("getTabUrl", () => {
+		it("should return the URL of the specified tab", async () => {
+			const mock = getChromeMock();
+			mock.tabs.get.mockResolvedValue({
+				id: 42,
+				url: "https://github.com/owner/repo/pull/10/files",
+			});
+
+			const url = await adapter.getTabUrl(42);
+
+			expect(url).toBe("https://github.com/owner/repo/pull/10/files");
+			expect(mock.tabs.get).toHaveBeenCalledWith(42);
+		});
+
+		it("should return null when tab does not exist", async () => {
+			const mock = getChromeMock();
+			mock.tabs.get.mockRejectedValue(new Error("No tab with id: 999"));
+
+			const url = await adapter.getTabUrl(999);
+
+			expect(url).toBeNull();
+		});
+
+		it("should return null when tab has no URL", async () => {
+			const mock = getChromeMock();
+			mock.tabs.get.mockResolvedValue({ id: 42 });
+
+			const url = await adapter.getTabUrl(42);
+
+			expect(url).toBeNull();
+		});
+	});
+
+	describe("navigateTabToUrl", () => {
+		it("should call chrome.tabs.update with the tab id and url", async () => {
+			const mock = getChromeMock();
+			mock.tabs.update.mockResolvedValue(undefined);
+
+			await adapter.navigateTabToUrl(42, "https://github.com/owner/repo/pull/10");
+
+			expect(mock.tabs.update).toHaveBeenCalledWith(42, {
+				url: "https://github.com/owner/repo/pull/10",
+			});
+		});
+
+		it("should propagate error when chrome.tabs.update rejects", async () => {
+			const mock = getChromeMock();
+			mock.tabs.update.mockRejectedValue(new Error("No tab with id: 42"));
+
+			await expect(
+				adapter.navigateTabToUrl(42, "https://github.com/owner/repo/pull/10"),
+			).rejects.toThrow("No tab with id: 42");
+		});
+
+		it("should throw when url does not start with https://github.com/", async () => {
+			await expect(adapter.navigateTabToUrl(42, "javascript:alert(1)")).rejects.toThrow(
+				"URL must start with https://github.com/",
+			);
+		});
+
+		it("should throw for http://github.com/ (non-https)", async () => {
+			await expect(adapter.navigateTabToUrl(42, "http://github.com/owner/repo")).rejects.toThrow(
+				"URL must start with https://github.com/",
+			);
 		});
 	});
 

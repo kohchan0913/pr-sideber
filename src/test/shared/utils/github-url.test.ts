@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractPrBaseUrl } from "../../../shared/utils/github-url";
+import { extractPrBaseUrl, isPrSubPage } from "../../../shared/utils/github-url";
 
 describe("extractPrBaseUrl", () => {
 	it("should return PR TOP URL as-is", () => {
@@ -28,6 +28,12 @@ describe("extractPrBaseUrl", () => {
 
 	it("should extract TOP URL from URL with query parameters", () => {
 		expect(extractPrBaseUrl("https://github.com/owner/repo/pull/123?diff=unified")).toBe(
+			"https://github.com/owner/repo/pull/123",
+		);
+	});
+
+	it("should extract TOP URL from URL with trailing slash", () => {
+		expect(extractPrBaseUrl("https://github.com/owner/repo/pull/123/")).toBe(
 			"https://github.com/owner/repo/pull/123",
 		);
 	});
@@ -68,5 +74,43 @@ describe("extractPrBaseUrl", () => {
 		expect(extractPrBaseUrl("https://github.com/owner/repo/pull/123/checks")).toBe(
 			"https://github.com/owner/repo/pull/123",
 		);
+	});
+});
+
+describe("isPrSubPage", () => {
+	it("should return true for /files sub-page", () => {
+		expect(isPrSubPage("https://github.com/owner/repo/pull/123/files")).toBe(true);
+	});
+
+	it("should return true for /commits sub-page", () => {
+		expect(isPrSubPage("https://github.com/owner/repo/pull/123/commits")).toBe(true);
+	});
+
+	it("should return true for /checks sub-page", () => {
+		expect(isPrSubPage("https://github.com/owner/repo/pull/123/checks")).toBe(true);
+	});
+
+	it("should return true for /commits/<sha> deep path", () => {
+		expect(isPrSubPage("https://github.com/owner/repo/pull/123/commits/abc123def456")).toBe(true);
+	});
+
+	it("should return true for /files with query parameters", () => {
+		expect(isPrSubPage("https://github.com/owner/repo/pull/123/files?diff=unified")).toBe(true);
+	});
+
+	it("should return true for /files with anchor fragment", () => {
+		expect(isPrSubPage("https://github.com/owner/repo/pull/123/files#diff-abc123")).toBe(true);
+	});
+
+	it("should return false for PR top page", () => {
+		expect(isPrSubPage("https://github.com/owner/repo/pull/123")).toBe(false);
+	});
+
+	it("should return false for PR top page with trailing slash", () => {
+		expect(isPrSubPage("https://github.com/owner/repo/pull/123/")).toBe(false);
+	});
+
+	it("should return false for non-PR URL", () => {
+		expect(isPrSubPage("https://github.com/owner/repo")).toBe(false);
 	});
 });

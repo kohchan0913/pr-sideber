@@ -367,6 +367,8 @@ describe("createMessageHandler", () => {
 			activateTab: ReturnType<typeof vi.fn>;
 			openNewTab: ReturnType<typeof vi.fn>;
 			getCurrentTabUrl: ReturnType<typeof vi.fn>;
+			getTabUrl: ReturnType<typeof vi.fn>;
+			navigateTabToUrl: ReturnType<typeof vi.fn>;
 		};
 
 		beforeEach(() => {
@@ -376,6 +378,8 @@ describe("createMessageHandler", () => {
 				activateTab: vi.fn().mockResolvedValue(undefined),
 				openNewTab: vi.fn().mockResolvedValue(undefined),
 				getCurrentTabUrl: vi.fn().mockResolvedValue(null),
+				getTabUrl: vi.fn().mockResolvedValue(null),
+				navigateTabToUrl: vi.fn().mockResolvedValue(undefined),
 			};
 			services = {
 				auth: mockAuth,
@@ -479,6 +483,8 @@ describe("createMessageHandler", () => {
 			activateTab: ReturnType<typeof vi.fn>;
 			openNewTab: ReturnType<typeof vi.fn>;
 			getCurrentTabUrl: ReturnType<typeof vi.fn>;
+			getTabUrl: ReturnType<typeof vi.fn>;
+			navigateTabToUrl: ReturnType<typeof vi.fn>;
 		};
 
 		beforeEach(() => {
@@ -488,6 +494,8 @@ describe("createMessageHandler", () => {
 				activateTab: vi.fn().mockResolvedValue(undefined),
 				openNewTab: vi.fn().mockResolvedValue(undefined),
 				getCurrentTabUrl: vi.fn().mockResolvedValue(null),
+				getTabUrl: vi.fn().mockResolvedValue(null),
+				navigateTabToUrl: vi.fn().mockResolvedValue(undefined),
 			};
 			services = {
 				auth: mockAuth,
@@ -498,6 +506,8 @@ describe("createMessageHandler", () => {
 
 		it("should activate existing tab when a matching PR tab is found", async () => {
 			mockTabNavigation.findExistingPrTab.mockResolvedValue(42);
+			// PR TOP にいるので navigate しない
+			mockTabNavigation.getTabUrl.mockResolvedValue("https://github.com/owner/repo/pull/10");
 			const sendResponse = vi.fn();
 
 			handler(
@@ -514,6 +524,7 @@ describe("createMessageHandler", () => {
 				"https://github.com/owner/repo/pull/10",
 			);
 			expect(mockTabNavigation.activateTab).toHaveBeenCalledWith(42);
+			expect(mockTabNavigation.navigateTabToUrl).not.toHaveBeenCalled();
 			expect(mockTabNavigation.openNewTab).not.toHaveBeenCalled();
 			const response = sendResponse.mock.calls[0][0];
 			expect(response).toEqual({ ok: true, data: undefined });
@@ -581,6 +592,145 @@ describe("createMessageHandler", () => {
 			expect(mockTabNavigation.openNewTab).toHaveBeenCalledWith(
 				"https://github.com/owner/repo/issues/5",
 			);
+		});
+	});
+
+	describe("NAVIGATE_TO_PR (smart navigation to PR top)", () => {
+		let mockTabNavigation: {
+			navigateCurrentTab: ReturnType<typeof vi.fn>;
+			findExistingPrTab: ReturnType<typeof vi.fn>;
+			activateTab: ReturnType<typeof vi.fn>;
+			openNewTab: ReturnType<typeof vi.fn>;
+			getCurrentTabUrl: ReturnType<typeof vi.fn>;
+			getTabUrl: ReturnType<typeof vi.fn>;
+			navigateTabToUrl: ReturnType<typeof vi.fn>;
+		};
+
+		beforeEach(() => {
+			mockTabNavigation = {
+				navigateCurrentTab: vi.fn().mockResolvedValue(undefined),
+				findExistingPrTab: vi.fn().mockResolvedValue(null),
+				activateTab: vi.fn().mockResolvedValue(undefined),
+				openNewTab: vi.fn().mockResolvedValue(undefined),
+				getCurrentTabUrl: vi.fn().mockResolvedValue(null),
+				getTabUrl: vi.fn().mockResolvedValue(null),
+				navigateTabToUrl: vi.fn().mockResolvedValue(undefined),
+			};
+			services = {
+				auth: mockAuth,
+				tabNavigation: mockTabNavigation,
+			} as unknown as AppServices;
+			handler = createMessageHandler(services);
+		});
+
+		it("should activate tab and navigate to PR top when existing tab is on a sub-page", async () => {
+			mockTabNavigation.findExistingPrTab.mockResolvedValue(42);
+			mockTabNavigation.getTabUrl.mockResolvedValue("https://github.com/owner/repo/pull/10/files");
+			const sendResponse = vi.fn();
+
+			handler(
+				{ type: "NAVIGATE_TO_PR", payload: { url: "https://github.com/owner/repo/pull/10" } },
+				createTrustedSender(),
+				sendResponse,
+			);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockTabNavigation.activateTab).toHaveBeenCalledWith(42);
+			expect(mockTabNavigation.navigateTabToUrl).toHaveBeenCalledWith(
+				42,
+				"https://github.com/owner/repo/pull/10",
+			);
+			const response = sendResponse.mock.calls[0][0];
+			expect(response).toEqual({ ok: true, data: undefined });
+		});
+
+		it("should activate tab without navigating when existing tab is already on PR top", async () => {
+			mockTabNavigation.findExistingPrTab.mockResolvedValue(42);
+			mockTabNavigation.getTabUrl.mockResolvedValue("https://github.com/owner/repo/pull/10");
+			const sendResponse = vi.fn();
+
+			handler(
+				{ type: "NAVIGATE_TO_PR", payload: { url: "https://github.com/owner/repo/pull/10" } },
+				createTrustedSender(),
+				sendResponse,
+			);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockTabNavigation.activateTab).toHaveBeenCalledWith(42);
+			expect(mockTabNavigation.navigateTabToUrl).not.toHaveBeenCalled();
+			const response = sendResponse.mock.calls[0][0];
+			expect(response).toEqual({ ok: true, data: undefined });
+		});
+
+		it("should activate tab without navigating when getTabUrl returns null (fallback)", async () => {
+			mockTabNavigation.findExistingPrTab.mockResolvedValue(42);
+			mockTabNavigation.getTabUrl.mockResolvedValue(null);
+			const sendResponse = vi.fn();
+
+			handler(
+				{ type: "NAVIGATE_TO_PR", payload: { url: "https://github.com/owner/repo/pull/10" } },
+				createTrustedSender(),
+				sendResponse,
+			);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockTabNavigation.activateTab).toHaveBeenCalledWith(42);
+			expect(mockTabNavigation.navigateTabToUrl).not.toHaveBeenCalled();
+			const response = sendResponse.mock.calls[0][0];
+			expect(response).toEqual({ ok: true, data: undefined });
+		});
+
+		it("should not open new tab when navigateTabToUrl fails after activateTab succeeds", async () => {
+			mockTabNavigation.findExistingPrTab.mockResolvedValue(42);
+			mockTabNavigation.getTabUrl.mockResolvedValue("https://github.com/owner/repo/pull/10/files");
+			mockTabNavigation.navigateTabToUrl.mockRejectedValue(new Error("Tab update failed"));
+			const sendResponse = vi.fn();
+
+			handler(
+				{ type: "NAVIGATE_TO_PR", payload: { url: "https://github.com/owner/repo/pull/10" } },
+				createTrustedSender(),
+				sendResponse,
+			);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockTabNavigation.activateTab).toHaveBeenCalledWith(42);
+			expect(mockTabNavigation.navigateTabToUrl).toHaveBeenCalled();
+			expect(mockTabNavigation.openNewTab).not.toHaveBeenCalled();
+			const response = sendResponse.mock.calls[0][0];
+			expect(response).toEqual({ ok: true, data: undefined });
+		});
+
+		it("should activate tab without navigating when getTabUrl rejects", async () => {
+			mockTabNavigation.findExistingPrTab.mockResolvedValue(42);
+			mockTabNavigation.getTabUrl.mockRejectedValue(new Error("Tab disappeared"));
+			const sendResponse = vi.fn();
+
+			handler(
+				{ type: "NAVIGATE_TO_PR", payload: { url: "https://github.com/owner/repo/pull/10" } },
+				createTrustedSender(),
+				sendResponse,
+			);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockTabNavigation.activateTab).toHaveBeenCalledWith(42);
+			expect(mockTabNavigation.navigateTabToUrl).not.toHaveBeenCalled();
+			const response = sendResponse.mock.calls[0][0];
+			expect(response).toEqual({ ok: true, data: undefined });
 		});
 	});
 });

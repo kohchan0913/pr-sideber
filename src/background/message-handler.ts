@@ -1,6 +1,6 @@
 import type { MessageType, RequestMessage, ResponseMessage } from "../shared/types/messages";
 import { isRequestMessage } from "../shared/types/messages";
-import { extractPrBaseUrl } from "../shared/utils/github-url";
+import { extractPrBaseUrl, isPrSubPage } from "../shared/utils/github-url";
 import type { AppServices } from "./types";
 
 /** メッセージタイプごとの汎用エラーメッセージ */
@@ -122,7 +122,26 @@ async function handleMessage(
 						try {
 							await services.tabNavigation.activateTab(existingTabId);
 						} catch {
+							// activateTab 失敗はタブが閉じられた等の TOCTOU。新規タブで代替する
 							await services.tabNavigation.openNewTab(url);
+							sendResponse({ ok: true, data: undefined });
+							break;
+						}
+						// activateTab 成功後、サブページにいる場合は PR トップに遷移する。
+						// navigateTabToUrl が失敗しても activateTab は完了しているため openNewTab は呼ばない。
+						let currentTabUrl: string | null = null;
+						try {
+							// adapter が例外を投げた場合の安全策
+							currentTabUrl = await services.tabNavigation.getTabUrl(existingTabId);
+						} catch {
+							// getTabUrl 失敗時は activateTab のみで完了
+						}
+						if (currentTabUrl && isPrSubPage(currentTabUrl)) {
+							try {
+								await services.tabNavigation.navigateTabToUrl(existingTabId, prBaseUrl);
+							} catch {
+								// activateTab 済みなのでタブは開いている。navigateTabToUrl 失敗は無視する
+							}
 						}
 					} else {
 						await services.tabNavigation.openNewTab(url);
