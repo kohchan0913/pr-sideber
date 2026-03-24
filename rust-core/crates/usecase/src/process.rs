@@ -42,6 +42,7 @@ mod tests {
             5,
             "2026-01-01T00:00:00Z".to_string(),
             updated_at.to_string(),
+            0,
         )
         .expect("test PR should be valid")
     }

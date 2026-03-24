@@ -20,6 +20,7 @@ function createPrItemDto(overrides: Partial<PrItemDto> = {}): PrItemDto {
 		createdAt: "2026-03-20T10:00:00Z",
 		updatedAt: "2026-03-23T10:00:00Z",
 		sizeLabel: "S",
+		unresolvedCommentCount: 0,
 		...overrides,
 	};
 }

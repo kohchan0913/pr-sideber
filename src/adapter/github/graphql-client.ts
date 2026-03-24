@@ -56,6 +56,12 @@ fragment PrFields on PullRequest {
   createdAt
   updatedAt
   mergeable
+  reviewThreads(first: 100) {
+    totalCount
+    nodes {
+      isResolved
+    }
+  }
 }`;
 
 const PULL_REQUESTS_QUERY = `

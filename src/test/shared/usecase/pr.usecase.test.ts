@@ -31,6 +31,7 @@ describe("pr usecase", () => {
 					createdAt: "2026-03-20T00:00:00Z",
 					updatedAt: "2026-03-21T00:00:00Z",
 					sizeLabel: "S",
+					unresolvedCommentCount: 0,
 				},
 			],
 			totalCount: 1,

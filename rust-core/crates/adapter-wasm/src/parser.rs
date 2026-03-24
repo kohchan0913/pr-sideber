@@ -47,6 +47,21 @@ pub struct PrNode {
     pub created_at: String,
     pub updated_at: String,
     pub mergeable: Option<String>,
+    pub review_threads: Option<ReviewThreadConnection>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewThreadConnection {
+    /// GraphQL の totalCount。nodes が first:100 で切り捨てられたかどうかの判定に使える。
+    pub total_count: Option<u32>,
+    pub nodes: Vec<ReviewThread>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewThread {
+    pub is_resolved: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,6 +155,14 @@ pub fn convert_node_to_pull_request(node: PrNode) -> Result<PullRequest, WasmErr
     let mergeable_status =
         usecase::determine::determine_mergeable_status(node.mergeable.as_deref())?;
 
+    let unresolved_comment_count = node
+        .review_threads
+        .map(|rt| {
+            let count = rt.nodes.iter().filter(|t| !t.is_resolved).count();
+            u32::try_from(count).unwrap_or(u32::MAX)
+        })
+        .unwrap_or(0);
+
     let pr = PullRequest::new(
         node.id,
         node.number,
@@ -155,6 +178,7 @@ pub fn convert_node_to_pull_request(node: PrNode) -> Result<PullRequest, WasmErr
         node.deletions.unwrap_or(0),
         node.created_at,
         node.updated_at,
+        unresolved_comment_count,
     )?;
 
     Ok(pr)
@@ -823,6 +847,214 @@ mod tests {
         assert!(parsed.my_prs.is_empty());
         assert_eq!(parsed.review_requests.len(), 1);
         assert_eq!(parsed.review_requests[0].id(), "PR_1");
+    }
+
+    // --- unresolved_comment_count tests (Issue #200) ---
+
+    #[test]
+    fn review_threads_with_unresolved_comments_are_counted() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": "APPROVED",
+                                "author": { "login": "alice" },
+                                "commits": { "nodes": [] },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "additions": 10,
+                                "deletions": 5,
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null,
+                                "reviewThreads": {
+                                    "nodes": [
+                                        { "isResolved": false },
+                                        { "isResolved": true },
+                                        { "isResolved": false },
+                                        { "isResolved": false }
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let parsed = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(
+            parsed.my_prs[0].unresolved_comment_count(),
+            3,
+            "3 of 4 review threads are unresolved"
+        );
+    }
+
+    #[test]
+    fn review_threads_null_defaults_to_zero_unresolved() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": null,
+                                "author": { "login": "alice" },
+                                "commits": { "nodes": [] },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null,
+                                "reviewThreads": null
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let parsed = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(
+            parsed.my_prs[0].unresolved_comment_count(),
+            0,
+            "null reviewThreads should default to 0"
+        );
+    }
+
+    #[test]
+    fn review_threads_absent_defaults_to_zero_unresolved() {
+        // reviewThreads フィールドが JSON に存在しないケース
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": null,
+                                "author": { "login": "alice" },
+                                "commits": { "nodes": [] },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let parsed = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(
+            parsed.my_prs[0].unresolved_comment_count(),
+            0,
+            "absent reviewThreads should default to 0"
+        );
+    }
+
+    #[test]
+    fn review_threads_empty_nodes_gives_zero_unresolved() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": "APPROVED",
+                                "author": { "login": "alice" },
+                                "commits": { "nodes": [] },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "additions": 10,
+                                "deletions": 5,
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null,
+                                "reviewThreads": {
+                                    "nodes": []
+                                }
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let parsed = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(
+            parsed.my_prs[0].unresolved_comment_count(),
+            0,
+            "empty reviewThreads.nodes should give 0 unresolved"
+        );
+    }
+
+    #[test]
+    fn review_threads_all_resolved_gives_zero_unresolved() {
+        let json = r#"{
+            "data": {
+                "myPrs": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "PR_1",
+                                "title": "test pr",
+                                "url": "https://github.com/o/r/pull/1",
+                                "number": 1,
+                                "isDraft": false,
+                                "reviewDecision": "APPROVED",
+                                "author": { "login": "alice" },
+                                "commits": { "nodes": [] },
+                                "repository": { "nameWithOwner": "o/r" },
+                                "additions": 10,
+                                "deletions": 5,
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null,
+                                "reviewThreads": {
+                                    "nodes": [
+                                        { "isResolved": true },
+                                        { "isResolved": true },
+                                        { "isResolved": true }
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                },
+                "reviewRequested": { "edges": [] }
+            }
+        }"#;
+
+        let parsed = parse_pull_request_nodes(json).expect("should parse");
+        assert_eq!(
+            parsed.my_prs[0].unresolved_comment_count(),
+            0,
+            "all resolved threads should give 0 unresolved"
+        );
     }
 
     #[test]
