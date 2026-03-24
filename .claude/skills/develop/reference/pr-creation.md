@@ -26,9 +26,11 @@ IMPORTANT: PR を作成する前に、以下の全セクションが埋まって
 
 `## スクリーンショット` は UI 変更がない場合のみ省略可。
 
-## PR 作成コマンド
+## PR 作成
 
 `.github/pull_request_template.md` に準拠する。
+
+### 方法 A: `gh` CLI（ローカル環境）
 
 ```bash
 gh pr create --title "feat: タイトル" --body "$(cat <<'EOF'
@@ -58,7 +60,59 @@ EOF
 )"
 ```
 
+### 方法 B: MCP ツール（GitHub MCP 環境）
+
+IMPORTANT: `mcp__github__create_pull_request` の `body` パラメータには Markdown テキストをそのまま渡す。
+- 改行は実際の改行文字を使う。`\n` リテラルや文字列連結で組み立てない
+- `"` はそのまま書く。HTML エンティティ (`&quot;`) やエスケープ (`\"`) にしない
+- HEREDOC のようなシェル構文は不要。プレーンな Markdown テキストを直接渡す
+
+```
+ツール: mcp__github__create_pull_request
+パラメータ:
+  owner: kohchan0913
+  repo: pr-sideber
+  title: "feat: タイトル"
+  head: ブランチ名
+  base: main
+  body: (以下の Markdown をそのまま渡す)
+```
+
+body の内容:
+```markdown
+## 概要
+(Issue の要約 + 何を実装したか — 具体的に書く)
+
+## 変更内容
+- `path/to/file`: 変更内容の説明
+- `path/to/file`: 変更内容の説明
+
+## 関連 Issue
+- closes #番号
+
+## テスト
+- [x] TypeScript 型チェック通過 (`pnpm check`)
+- [x] フロントエンドテスト通過 (`pnpm test`)
+- [x] Rust lint 通過 (`cargo clippy --all-targets`)
+- [x] Rust テスト通過 (`cargo test`)
+- [x] `/verify` で検証ループ PASS
+
+## スクリーンショット
+(UI 変更がある場合のみ)
+
+## レビュー観点
+(レビュアーに特に見てほしいポイント — 具体的に書く)
+```
+
+### どちらを使うか
+
+- `gh` CLI が利用可能 → 方法 A
+- `mcp__github__*` ツールが利用可能 → 方法 B
+- 両方利用可能 → 方法 A を優先（HEREDOC で改行が確実に保持されるため）
+
 ## Agent レビューサマリーをコメントに追記
+
+### 方法 A: `gh` CLI
 
 ```bash
 gh pr comment $PR_NUMBER --body "$(cat <<'EOF'
@@ -76,4 +130,17 @@ gh pr comment $PR_NUMBER --body "$(cat <<'EOF'
 - [SEVERITY/観点] 指摘内容 → **#Issue番号** で追跡
 EOF
 )"
+```
+
+### 方法 B: MCP ツール
+
+IMPORTANT: `body` の注意事項は PR 作成と同じ。改行は実際の改行文字、エスケープ不要。
+
+```
+ツール: mcp__github__add_issue_comment
+パラメータ:
+  owner: kohchan0913
+  repo: pr-sideber
+  issue_number: PR番号
+  body: (Markdown テキストをそのまま渡す)
 ```
