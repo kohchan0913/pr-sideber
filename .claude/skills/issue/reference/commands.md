@@ -4,6 +4,8 @@ Issue 作成時にこのファイルを参照する。
 
 ## Issue 作成
 
+### 方法 A: `gh` CLI（ローカル環境）
+
 ```bash
 gh issue create --title "タイトル" --body "$(cat <<'EOF'
 ## 概要
@@ -14,10 +16,35 @@ EOF
 )" --label "enhancement"
 ```
 
+### 方法 B: MCP ツール（GitHub MCP 環境）
+
+IMPORTANT: `body` パラメータには Markdown テキストをそのまま渡す。
+- 改行は実際の改行文字を使う。`\n` リテラルや文字列連結で組み立てない
+- `"` はそのまま書く。HTML エンティティやエスケープにしない
+
+```
+ツール: mcp__github__issue_write
+パラメータ:
+  method: create
+  owner: kohchan0913
+  repo: pr-sideber
+  title: "タイトル"
+  labels: ["enhancement"]
+  body: (Markdown テキストをそのまま渡す)
+```
+
+### ラベル選択
+
 ラベルは種別に応じて変更:
 - Feature → `enhancement`
 - Bug → `bug`
 - Task → `task`
+
+### どちらを使うか
+
+- `gh` CLI が利用可能 → 方法 A
+- `mcp__github__*` ツールが利用可能 → 方法 B
+- 両方利用可能 → 方法 A を優先
 
 ## Project Category 付与
 
