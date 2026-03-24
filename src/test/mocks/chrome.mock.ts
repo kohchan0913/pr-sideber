@@ -42,9 +42,14 @@ type ChromeMock = {
 		setBadgeBackgroundColor: ReturnType<typeof vi.fn>;
 	};
 	tabs: {
+		get: ReturnType<typeof vi.fn>;
 		query: ReturnType<typeof vi.fn>;
 		update: ReturnType<typeof vi.fn>;
 		create: ReturnType<typeof vi.fn>;
+		onActivated: {
+			addListener: ReturnType<typeof vi.fn>;
+			removeListener: ReturnType<typeof vi.fn>;
+		};
 		onUpdated: {
 			addListener: ReturnType<typeof vi.fn>;
 			removeListener: ReturnType<typeof vi.fn>;
@@ -100,9 +105,14 @@ function createChromeMock(): ChromeMock {
 			setBadgeBackgroundColor: vi.fn(),
 		},
 		tabs: {
+			get: vi.fn(),
 			query: vi.fn(),
 			update: vi.fn(),
 			create: vi.fn(),
+			onActivated: {
+				addListener: vi.fn(),
+				removeListener: vi.fn(),
+			},
 			onUpdated: {
 				addListener: vi.fn(),
 				removeListener: vi.fn(),

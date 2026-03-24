@@ -1,17 +1,21 @@
 <script lang="ts">
 	import type { PrItemDto } from "../../domain/ports/pr-processor.port";
+	import { extractPrBaseUrl } from "../../shared/utils/github-url";
 	import PrItem from "./PrItem.svelte";
 
 	type Props = {
 		title: string;
 		items: readonly PrItemDto[];
 		isOpen?: boolean;
+		activeTabUrl?: string | null;
 		onNavigate?: (url: string) => void;
 	};
 
-	const { title, items, isOpen: initialOpen = true, onNavigate }: Props = $props();
+	const { title, items, isOpen: initialOpen = true, activeTabUrl, onNavigate }: Props = $props();
 
 	let open = $state(initialOpen);
+
+	const activeTabBaseUrl = $derived(activeTabUrl != null ? extractPrBaseUrl(activeTabUrl) : null);
 
 	function toggle() {
 		open = !open;
@@ -31,7 +35,7 @@
 				<p class="empty-message">PR がありません</p>
 			{:else}
 				{#each items as pr (pr.url)}
-					<PrItem {pr} {onNavigate} />
+					<PrItem {pr} {onNavigate} isActive={activeTabBaseUrl != null && activeTabBaseUrl === extractPrBaseUrl(pr.url)} />
 				{/each}
 			{/if}
 		</div>
