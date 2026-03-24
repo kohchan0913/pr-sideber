@@ -27,3 +27,10 @@ export function extractPrBaseUrl(url: string): string | null {
 
 	return `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}`;
 }
+
+/**
+ * URL が PR のサブページ (/files, /commits, /checks など) かどうかを判定する。
+ */
+export function isPrSubPage(_url: string): boolean {
+	throw new Error("Not implemented");
+}

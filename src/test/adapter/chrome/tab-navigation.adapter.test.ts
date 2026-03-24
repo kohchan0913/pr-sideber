@@ -162,6 +162,61 @@ describe("TabNavigationAdapter", () => {
 		});
 	});
 
+	describe("getTabUrl", () => {
+		it("should return the URL of the specified tab", async () => {
+			const mock = getChromeMock();
+			mock.tabs.get.mockResolvedValue({
+				id: 42,
+				url: "https://github.com/owner/repo/pull/10/files",
+			});
+
+			const url = await adapter.getTabUrl(42);
+
+			expect(url).toBe("https://github.com/owner/repo/pull/10/files");
+			expect(mock.tabs.get).toHaveBeenCalledWith(42);
+		});
+
+		it("should return null when tab does not exist", async () => {
+			const mock = getChromeMock();
+			mock.tabs.get.mockRejectedValue(new Error("No tab with id: 999"));
+
+			const url = await adapter.getTabUrl(999);
+
+			expect(url).toBeNull();
+		});
+
+		it("should return null when tab has no URL", async () => {
+			const mock = getChromeMock();
+			mock.tabs.get.mockResolvedValue({ id: 42 });
+
+			const url = await adapter.getTabUrl(42);
+
+			expect(url).toBeNull();
+		});
+	});
+
+	describe("navigateTabToUrl", () => {
+		it("should call chrome.tabs.update with the tab id and url", async () => {
+			const mock = getChromeMock();
+			mock.tabs.update.mockResolvedValue(undefined);
+
+			await adapter.navigateTabToUrl(42, "https://github.com/owner/repo/pull/10");
+
+			expect(mock.tabs.update).toHaveBeenCalledWith(42, {
+				url: "https://github.com/owner/repo/pull/10",
+			});
+		});
+
+		it("should propagate error when chrome.tabs.update rejects", async () => {
+			const mock = getChromeMock();
+			mock.tabs.update.mockRejectedValue(new Error("No tab with id: 42"));
+
+			await expect(
+				adapter.navigateTabToUrl(42, "https://github.com/owner/repo/pull/10"),
+			).rejects.toThrow("No tab with id: 42");
+		});
+	});
+
 	describe("getCurrentTabUrl", () => {
 		it("should return the URL of the active tab", async () => {
 			const mock = getChromeMock();
