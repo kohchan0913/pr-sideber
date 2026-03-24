@@ -24,6 +24,7 @@ pub struct PullRequest {
     /// ISO 8601 形式の文字列 (例: "2026-01-02T00:00:00Z")。
     /// `created_at` と同じ理由で String を採用。
     updated_at: String,
+    unresolved_comment_count: u32,
 }
 
 impl PullRequest {
@@ -43,6 +44,7 @@ impl PullRequest {
         deletions: u32,
         created_at: String,
         updated_at: String,
+        unresolved_comment_count: u32,
     ) -> Result<Self, crate::error::DomainError> {
         use crate::error::DomainError;
 
@@ -117,6 +119,7 @@ impl PullRequest {
             deletions,
             created_at,
             updated_at,
+            unresolved_comment_count,
         })
     }
 
@@ -176,6 +179,10 @@ impl PullRequest {
         &self.updated_at
     }
 
+    pub fn unresolved_comment_count(&self) -> u32 {
+        self.unresolved_comment_count
+    }
+
     /// PullRequest を分解してフィールドの所有権を返す。
     /// adapter 層で不要なアロケーションを避けるために使用する。
     #[allow(clippy::type_complexity)]
@@ -196,6 +203,7 @@ impl PullRequest {
         u32,
         String,
         String,
+        u32,
     ) {
         (
             self.id,
@@ -212,6 +220,7 @@ impl PullRequest {
             self.deletions,
             self.created_at,
             self.updated_at,
+            self.unresolved_comment_count,
         )
     }
 }
@@ -240,6 +249,7 @@ mod tests {
             20,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         )
         .expect("make_valid_pr: all fields are valid")
     }
@@ -308,6 +318,7 @@ mod tests {
             20,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_ok());
     }
@@ -329,6 +340,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_err());
         assert!(matches!(
@@ -354,6 +366,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_err());
         assert!(matches!(
@@ -379,6 +392,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_err());
         assert!(matches!(
@@ -404,6 +418,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_err());
         assert!(matches!(
@@ -429,6 +444,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_err());
         assert!(matches!(
@@ -454,6 +470,7 @@ mod tests {
             0,
             "".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_err());
         assert!(matches!(
@@ -479,6 +496,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "".to_string(),
+            0,
         );
         assert!(result.is_err());
         assert!(matches!(
@@ -504,6 +522,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_err());
         assert!(matches!(
@@ -529,6 +548,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_err());
         assert!(matches!(
@@ -554,6 +574,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(matches!(
             result.unwrap_err(),
@@ -578,6 +599,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(matches!(
             result.unwrap_err(),
@@ -602,6 +624,7 @@ mod tests {
             0,
             "2026-01-01T00:00:00Z".to_string(),
             "2026-01-02T00:00:00Z".to_string(),
+            0,
         );
         assert!(result.is_ok());
     }
@@ -623,5 +646,79 @@ mod tests {
         assert_eq!(pr.deletions(), 20);
         assert_eq!(pr.created_at(), "2026-01-01T00:00:00Z");
         assert_eq!(pr.updated_at(), "2026-01-02T00:00:00Z");
+    }
+
+    // --- unresolved_comment_count tests (Issue #200) ---
+
+    #[test]
+    fn new_accepts_unresolved_comment_count_parameter() {
+        let result = PullRequest::new(
+            "PR_123".to_string(),
+            42,
+            "Add feature X".to_string(),
+            "octocat".to_string(),
+            "https://github.com/owner/repo/pull/42".to_string(),
+            "owner/repo".to_string(),
+            false,
+            ApprovalStatus::Approved,
+            CiStatus::Passed,
+            MergeableStatus::Unknown,
+            100,
+            20,
+            "2026-01-01T00:00:00Z".to_string(),
+            "2026-01-02T00:00:00Z".to_string(),
+            3, // unresolved_comment_count
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn unresolved_comment_count_getter_returns_correct_value() {
+        let pr = PullRequest::new(
+            "PR_123".to_string(),
+            42,
+            "Add feature X".to_string(),
+            "octocat".to_string(),
+            "https://github.com/owner/repo/pull/42".to_string(),
+            "owner/repo".to_string(),
+            false,
+            ApprovalStatus::Approved,
+            CiStatus::Passed,
+            MergeableStatus::Unknown,
+            100,
+            20,
+            "2026-01-01T00:00:00Z".to_string(),
+            "2026-01-02T00:00:00Z".to_string(),
+            5, // unresolved_comment_count
+        )
+        .expect("valid PR");
+        assert_eq!(pr.unresolved_comment_count(), 5);
+    }
+
+    #[test]
+    fn serde_includes_unresolved_comment_count_key() {
+        let pr = PullRequest::new(
+            "PR_123".to_string(),
+            42,
+            "Add feature X".to_string(),
+            "octocat".to_string(),
+            "https://github.com/owner/repo/pull/42".to_string(),
+            "owner/repo".to_string(),
+            false,
+            ApprovalStatus::Approved,
+            CiStatus::Passed,
+            MergeableStatus::Unknown,
+            100,
+            20,
+            "2026-01-01T00:00:00Z".to_string(),
+            "2026-01-02T00:00:00Z".to_string(),
+            7, // unresolved_comment_count
+        )
+        .expect("valid PR");
+        let json = serde_json::to_string(&pr).expect("serialize should succeed");
+        assert!(
+            json.contains("\"unresolvedCommentCount\":7"),
+            "JSON should contain unresolvedCommentCount field, got: {json}"
+        );
     }
 }

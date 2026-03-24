@@ -5,6 +5,7 @@
 	import CiBadge from "./CiBadge.svelte";
 	import MergeableBadge from "./MergeableBadge.svelte";
 	import DraftBadge from "./DraftBadge.svelte";
+	import UnresolvedCommentBadge from "./UnresolvedCommentBadge.svelte";
 	import RelativeTime from "./RelativeTime.svelte";
 	import SizeBadge from "./SizeBadge.svelte";
 
@@ -45,6 +46,7 @@
 			<ApprovalBadge approvalStatus={pr.approvalStatus} />
 			<CiBadge ciStatus={pr.ciStatus} />
 			<MergeableBadge mergeableStatus={pr.mergeableStatus} />
+			<UnresolvedCommentBadge count={pr.unresolvedCommentCount} />
 		{/if}
 	</div>
 </div>

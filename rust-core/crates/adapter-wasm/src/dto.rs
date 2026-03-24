@@ -28,6 +28,7 @@ pub struct PrItemDto {
     pub updated_at: String,
     /// PR の変更規模ラベル ("XS", "S", "M", "L", "XL")。
     pub size_label: String,
+    pub unresolved_comment_count: u32,
 }
 
 impl From<PullRequest> for PrItemDto {
@@ -47,6 +48,7 @@ impl From<PullRequest> for PrItemDto {
             deletions,
             created_at,
             updated_at,
+            unresolved_comment_count,
         ) = pr.into_parts();
         Self {
             id,
@@ -66,6 +68,7 @@ impl From<PullRequest> for PrItemDto {
             size_label: determine_pr_size(additions, deletions)
                 .as_label()
                 .to_string(),
+            unresolved_comment_count,
         }
     }
 }
@@ -103,6 +106,7 @@ mod tests {
             created_at: "2026-01-01T00:00:00Z".to_string(),
             updated_at: "2026-01-02T00:00:00Z".to_string(),
             size_label: "M".to_string(),
+            unresolved_comment_count: 0,
         }
     }
 
@@ -195,6 +199,7 @@ mod tests {
             80,
             "2026-03-01T12:00:00Z".to_string(),
             "2026-03-15T18:30:00Z".to_string(),
+            0,
         )
         .expect("test PR should be valid");
 
@@ -250,6 +255,7 @@ mod tests {
                 5,
                 "2026-03-20T00:00:00Z".to_string(),
                 "2026-03-21T10:00:00Z".to_string(),
+                0,
             )
             .expect("test PR should be valid");
 
@@ -262,6 +268,79 @@ mod tests {
             assert_eq!(dto.ci_status, ci, "ci mismatch at index {i}");
             assert_eq!(dto.number, n, "number mismatch at index {i}");
         }
+    }
+
+    // --- unresolved_comment_count tests (Issue #200) ---
+
+    #[test]
+    fn from_pull_request_maps_unresolved_comment_count() {
+        use domain::entity::PullRequest;
+
+        let pr = PullRequest::new(
+            "PR_789".to_string(),
+            10,
+            "Fix comments".to_string(),
+            "alice".to_string(),
+            "https://github.com/org/repo/pull/10".to_string(),
+            "org/repo".to_string(),
+            false,
+            ApprovalStatus::Approved,
+            CiStatus::Passed,
+            MergeableStatus::Unknown,
+            50,
+            10,
+            "2026-03-01T00:00:00Z".to_string(),
+            "2026-03-02T00:00:00Z".to_string(),
+            4, // unresolved_comment_count
+        )
+        .expect("valid PR");
+
+        let dto = PrItemDto::from(pr);
+        assert_eq!(
+            dto.unresolved_comment_count, 4,
+            "unresolved_comment_count should be mapped from PullRequest to PrItemDto"
+        );
+    }
+
+    #[test]
+    fn from_pull_request_maps_zero_unresolved_comment_count() {
+        use domain::entity::PullRequest;
+
+        let pr = PullRequest::new(
+            "PR_zero".to_string(),
+            20,
+            "No comments".to_string(),
+            "bob".to_string(),
+            "https://github.com/org/repo/pull/20".to_string(),
+            "org/repo".to_string(),
+            false,
+            ApprovalStatus::Approved,
+            CiStatus::Passed,
+            MergeableStatus::Unknown,
+            30,
+            5,
+            "2026-03-01T00:00:00Z".to_string(),
+            "2026-03-02T00:00:00Z".to_string(),
+            0, // unresolved_comment_count
+        )
+        .expect("valid PR");
+
+        let dto = PrItemDto::from(pr);
+        assert_eq!(
+            dto.unresolved_comment_count, 0,
+            "zero unresolved_comment_count should be preserved through DTO mapping"
+        );
+    }
+
+    #[test]
+    fn pr_item_dto_serde_includes_unresolved_comment_count_camel_case() {
+        let mut item = make_pr_item();
+        item.unresolved_comment_count = 12;
+        let json = serde_json::to_string(&item).expect("serialize should succeed");
+        assert!(
+            json.contains("\"unresolvedCommentCount\":12"),
+            "JSON should contain unresolvedCommentCount in camelCase, got: {json}"
+        );
     }
 
     #[test]
