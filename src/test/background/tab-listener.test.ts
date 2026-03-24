@@ -48,7 +48,13 @@ describe("tab-listener (bootstrap)", () => {
 	describe("onActivated (tab switch)", () => {
 		it("should send TAB_URL_CHANGED message when tab is activated", async () => {
 			// tabs.get で指定タブの情報を返す
-			vi.mocked(chrome.tabs.get).mockResolvedValue({
+			// chrome.tabs.get にはコールバック版(void)とPromise版(Promise<Tab>)の2つのオーバーロードがあり、
+			// vi.mocked がコールバック版に解決してしまうため、明示的に型を指定する
+			(
+				vi.mocked(chrome.tabs.get) as unknown as ReturnType<
+					typeof vi.fn<() => Promise<chrome.tabs.Tab>>
+				>
+			).mockResolvedValue({
 				id: 1,
 				url: "https://github.com/owner/repo/pull/42",
 			} as chrome.tabs.Tab);
@@ -71,7 +77,11 @@ describe("tab-listener (bootstrap)", () => {
 		});
 
 		it("should not crash when chrome.tabs.get rejects", async () => {
-			vi.mocked(chrome.tabs.get).mockRejectedValue(new Error("tab not found"));
+			(
+				vi.mocked(chrome.tabs.get) as unknown as ReturnType<
+					typeof vi.fn<() => Promise<chrome.tabs.Tab>>
+				>
+			).mockRejectedValue(new Error("tab not found"));
 
 			const initializeApp = await loadInitializeApp();
 			initializeApp();
