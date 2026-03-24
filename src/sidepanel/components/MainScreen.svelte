@@ -14,6 +14,7 @@
 		loadPrsWithCache: (minutes: number) => Promise<(ProcessedPrsResult & { hasMore: boolean }) | null>;
 		subscribeToMessages: (callback: (message: unknown) => void) => () => void;
 		onNavigate?: (url: string) => void;
+		getCurrentTabUrl?: () => Promise<string | null>;
 	};
 
 	const { onLogout, fetchPrs, getCachedPrs, loadPrsWithCache, subscribeToMessages, onNavigate }: Props = $props();

@@ -45,6 +45,10 @@ type ChromeMock = {
 		query: ReturnType<typeof vi.fn>;
 		update: ReturnType<typeof vi.fn>;
 		create: ReturnType<typeof vi.fn>;
+		onActivated: {
+			addListener: ReturnType<typeof vi.fn>;
+			removeListener: ReturnType<typeof vi.fn>;
+		};
 		onUpdated: {
 			addListener: ReturnType<typeof vi.fn>;
 			removeListener: ReturnType<typeof vi.fn>;
@@ -103,6 +107,10 @@ function createChromeMock(): ChromeMock {
 			query: vi.fn(),
 			update: vi.fn(),
 			create: vi.fn(),
+			onActivated: {
+				addListener: vi.fn(),
+				removeListener: vi.fn(),
+			},
 			onUpdated: {
 				addListener: vi.fn(),
 				removeListener: vi.fn(),

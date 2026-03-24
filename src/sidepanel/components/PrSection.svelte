@@ -6,10 +6,11 @@
 		title: string;
 		items: readonly PrItemDto[];
 		isOpen?: boolean;
+		activeTabUrl?: string | null;
 		onNavigate?: (url: string) => void;
 	};
 
-	const { title, items, isOpen: initialOpen = true, onNavigate }: Props = $props();
+	const { title, items, isOpen: initialOpen = true, activeTabUrl, onNavigate }: Props = $props();
 
 	let open = $state(initialOpen);
 
