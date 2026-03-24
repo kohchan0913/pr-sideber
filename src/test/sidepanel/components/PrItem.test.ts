@@ -14,6 +14,7 @@ function createPrItemDto(overrides: Partial<PrItemDto> = {}): PrItemDto {
 		isDraft: false,
 		approvalStatus: "ReviewRequired",
 		ciStatus: "Passed",
+		mergeableStatus: "Unknown",
 		additions: 10,
 		deletions: 3,
 		createdAt: "2026-03-20T10:00:00Z",

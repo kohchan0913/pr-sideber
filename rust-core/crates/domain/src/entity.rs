@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::status::{ApprovalStatus, CiStatus};
+use crate::status::{ApprovalStatus, CiStatus, MergeableStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,6 +14,7 @@ pub struct PullRequest {
     is_draft: bool,
     approval_status: ApprovalStatus,
     ci_status: CiStatus,
+    mergeable_status: MergeableStatus,
     additions: u32,
     deletions: u32,
     /// ISO 8601 形式の文字列 (例: "2026-01-01T00:00:00Z")。
@@ -37,6 +38,7 @@ impl PullRequest {
         is_draft: bool,
         approval_status: ApprovalStatus,
         ci_status: CiStatus,
+        mergeable_status: MergeableStatus,
         additions: u32,
         deletions: u32,
         created_at: String,
@@ -110,6 +112,7 @@ impl PullRequest {
             is_draft,
             approval_status,
             ci_status,
+            mergeable_status,
             additions,
             deletions,
             created_at,
@@ -153,6 +156,10 @@ impl PullRequest {
         self.ci_status
     }
 
+    pub fn mergeable_status(&self) -> MergeableStatus {
+        self.mergeable_status
+    }
+
     pub fn additions(&self) -> u32 {
         self.additions
     }
@@ -184,6 +191,7 @@ impl PullRequest {
         bool,
         ApprovalStatus,
         CiStatus,
+        MergeableStatus,
         u32,
         u32,
         String,
@@ -199,6 +207,7 @@ impl PullRequest {
             self.is_draft,
             self.approval_status,
             self.ci_status,
+            self.mergeable_status,
             self.additions,
             self.deletions,
             self.created_at,
@@ -211,7 +220,7 @@ impl PullRequest {
 mod tests {
     use super::*;
     use crate::error::DomainError;
-    use crate::status::{ApprovalStatus, CiStatus};
+    use crate::status::{ApprovalStatus, CiStatus, MergeableStatus};
 
     /// ヘルパー: バリデーション付きコンストラクタで有効な PR を生成。
     /// テスト内で `.expect()` を個別に呼ばなくて済むよう、ここで unwrap する。
@@ -226,6 +235,7 @@ mod tests {
             false,
             ApprovalStatus::Approved,
             CiStatus::Passed,
+            MergeableStatus::Unknown,
             100,
             20,
             "2026-01-01T00:00:00Z".to_string(),
@@ -243,6 +253,7 @@ mod tests {
         assert!(!pr.is_draft());
         assert_eq!(pr.approval_status(), ApprovalStatus::Approved);
         assert_eq!(pr.ci_status(), CiStatus::Passed);
+        assert_eq!(pr.mergeable_status(), MergeableStatus::Unknown);
     }
 
     #[test]
@@ -266,6 +277,7 @@ mod tests {
         assert!(json.contains("\"isDraft\""));
         assert!(json.contains("\"approvalStatus\""));
         assert!(json.contains("\"ciStatus\""));
+        assert!(json.contains("\"mergeableStatus\""));
         assert!(json.contains("\"createdAt\""));
         assert!(json.contains("\"updatedAt\""));
     }
@@ -291,6 +303,7 @@ mod tests {
             false,
             ApprovalStatus::Approved,
             CiStatus::Passed,
+            MergeableStatus::Unknown,
             100,
             20,
             "2026-01-01T00:00:00Z".to_string(),
@@ -311,6 +324,7 @@ mod tests {
             false,
             ApprovalStatus::Approved,
             CiStatus::Passed,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -335,6 +349,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -359,6 +374,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -383,6 +399,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -407,6 +424,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -431,6 +449,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "".to_string(),
@@ -455,6 +474,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -479,6 +499,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -503,6 +524,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -527,6 +549,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -550,6 +573,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -573,6 +597,7 @@ mod tests {
             false,
             ApprovalStatus::Pending,
             CiStatus::None,
+            MergeableStatus::Unknown,
             0,
             0,
             "2026-01-01T00:00:00Z".to_string(),
@@ -593,6 +618,7 @@ mod tests {
         assert!(!pr.is_draft());
         assert_eq!(pr.approval_status(), ApprovalStatus::Approved);
         assert_eq!(pr.ci_status(), CiStatus::Passed);
+        assert_eq!(pr.mergeable_status(), MergeableStatus::Unknown);
         assert_eq!(pr.additions(), 100);
         assert_eq!(pr.deletions(), 20);
         assert_eq!(pr.created_at(), "2026-01-01T00:00:00Z");

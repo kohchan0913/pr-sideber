@@ -1,5 +1,5 @@
 use domain::error::DomainError;
-use domain::status::{ApprovalStatus, CiStatus, PrSize};
+use domain::status::{ApprovalStatus, CiStatus, MergeableStatus, PrSize};
 
 pub fn determine_pr_size(additions: u32, deletions: u32) -> PrSize {
     let total = additions.saturating_add(deletions);
@@ -41,11 +41,24 @@ pub fn determine_ci_status(status_check_rollup: Option<&str>) -> Result<CiStatus
     }
 }
 
+pub fn determine_mergeable_status(mergeable: Option<&str>) -> Result<MergeableStatus, DomainError> {
+    match mergeable {
+        None => Ok(MergeableStatus::Unknown),
+        Some("MERGEABLE") => Ok(MergeableStatus::Mergeable),
+        Some("CONFLICTING") => Ok(MergeableStatus::Conflicting),
+        Some("UNKNOWN") => Ok(MergeableStatus::Unknown),
+        Some(other) => Err(DomainError::InvalidField {
+            field: "mergeable".into(),
+            reason: format!("unknown mergeable status: {other}"),
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use domain::error::DomainError;
-    use domain::status::{ApprovalStatus, CiStatus};
+    use domain::status::{ApprovalStatus, CiStatus, MergeableStatus};
 
     // --- determine_approval_status ---
 
@@ -174,6 +187,67 @@ mod tests {
             }
             other => panic!("expected InvalidField error, got {other:?}"),
         }
+    }
+
+    // --- determine_mergeable_status ---
+
+    #[test]
+    fn mergeable_status_mergeable() {
+        let result =
+            determine_mergeable_status(Some("MERGEABLE")).expect("MERGEABLE should be valid");
+        assert_eq!(result, MergeableStatus::Mergeable);
+    }
+
+    #[test]
+    fn mergeable_status_conflicting() {
+        let result =
+            determine_mergeable_status(Some("CONFLICTING")).expect("CONFLICTING should be valid");
+        assert_eq!(result, MergeableStatus::Conflicting);
+    }
+
+    #[test]
+    fn mergeable_status_unknown() {
+        let result = determine_mergeable_status(Some("UNKNOWN")).expect("UNKNOWN should be valid");
+        assert_eq!(result, MergeableStatus::Unknown);
+    }
+
+    #[test]
+    fn mergeable_status_none_returns_unknown() {
+        let result = determine_mergeable_status(None).expect("None should map to Unknown");
+        assert_eq!(result, MergeableStatus::Unknown);
+    }
+
+    #[test]
+    fn mergeable_status_invalid_value_returns_error() {
+        let result = determine_mergeable_status(Some("INVALID_VALUE"));
+        assert!(result.is_err(), "invalid value should return an error");
+        match result {
+            Err(DomainError::InvalidField { field, .. }) => {
+                assert_eq!(field, "mergeable");
+            }
+            other => panic!("expected InvalidField error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn mergeable_status_empty_string_returns_error() {
+        let result = determine_mergeable_status(Some(""));
+        assert!(result.is_err(), "empty string should return an error");
+        match result {
+            Err(DomainError::InvalidField { field, .. }) => {
+                assert_eq!(field, "mergeable");
+            }
+            other => panic!("expected InvalidField error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn mergeable_status_lowercase_returns_error() {
+        let result = determine_mergeable_status(Some("mergeable"));
+        assert!(
+            result.is_err(),
+            "lowercase should return an error (only uppercase accepted)"
+        );
     }
 
     // --- determine_pr_size ---

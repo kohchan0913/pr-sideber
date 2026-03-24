@@ -46,6 +46,7 @@ pub struct PrNode {
     pub deletions: Option<u32>,
     pub created_at: String,
     pub updated_at: String,
+    pub mergeable: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -136,6 +137,9 @@ pub fn convert_node_to_pull_request(node: PrNode) -> Result<PullRequest, WasmErr
         .map(|rollup| rollup.state.as_str());
     let ci_status = usecase::determine::determine_ci_status(ci_state)?;
 
+    let mergeable_status =
+        usecase::determine::determine_mergeable_status(node.mergeable.as_deref())?;
+
     let pr = PullRequest::new(
         node.id,
         node.number,
@@ -146,6 +150,7 @@ pub fn convert_node_to_pull_request(node: PrNode) -> Result<PullRequest, WasmErr
         node.is_draft,
         approval_status,
         ci_status,
+        mergeable_status,
         node.additions.unwrap_or(0),
         node.deletions.unwrap_or(0),
         node.created_at,
@@ -192,7 +197,8 @@ mod tests {
                                 "additions": 100,
                                 "deletions": 20,
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -264,7 +270,8 @@ mod tests {
                                 },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -303,7 +310,8 @@ mod tests {
                                 },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -336,7 +344,8 @@ mod tests {
                                 },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -368,7 +377,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -410,7 +420,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -462,7 +473,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -494,7 +506,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -513,7 +526,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-03T00:00:00Z"
+                                "updatedAt": "2026-01-03T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -557,7 +571,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -591,7 +606,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -635,7 +651,8 @@ mod tests {
                                 },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -676,7 +693,8 @@ mod tests {
                                 },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -717,7 +735,8 @@ mod tests {
                                 },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -758,7 +777,8 @@ mod tests {
                                 },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -790,7 +810,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]
@@ -822,7 +843,8 @@ mod tests {
                                 "commits": { "nodes": [] },
                                 "repository": { "nameWithOwner": "o/r" },
                                 "createdAt": "2026-01-01T00:00:00Z",
-                                "updatedAt": "2026-01-02T00:00:00Z"
+                                "updatedAt": "2026-01-02T00:00:00Z",
+                                "mergeable": null
                             }
                         }
                     ]

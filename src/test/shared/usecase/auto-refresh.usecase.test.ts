@@ -34,6 +34,7 @@ describe("auto-refresh usecase", () => {
 					isDraft: false,
 					approvalStatus: "Approved",
 					ciStatus: "Passed",
+					mergeableStatus: "Unknown",
 					additions: 10,
 					deletions: 5,
 					createdAt: "2026-03-20T00:00:00Z",
@@ -86,11 +87,11 @@ describe("auto-refresh usecase", () => {
 	}
 
 	describe("start", () => {
-		it("should create an alarm named 'pr-refresh' with 2-minute interval", async () => {
+		it("should create an alarm named 'pr-refresh' with 30-second interval", async () => {
 			const useCase = createUseCase();
 			await useCase.start();
 
-			expect(mockAlarm.create).toHaveBeenCalledWith("pr-refresh", 2);
+			expect(mockAlarm.create).toHaveBeenCalledWith("pr-refresh", 0.5);
 		});
 
 		it("should register an onAlarm listener", async () => {
