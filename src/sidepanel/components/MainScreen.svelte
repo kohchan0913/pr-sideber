@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { untrack } from "svelte";
+	import type { IssueListDto } from "../../domain/ports/issue-processor.port";
 	import type { ProcessedPrsResult } from "../../domain/ports/pr-processor.port";
 	import type { CachedPrData } from "../../shared/types/cache";
 	import { isCacheUpdatedEvent, isTabUrlChangedEvent } from "../../shared/types/events";
+	import IssueSection from "./IssueSection.svelte";
 	import LogoutButton from "./LogoutButton.svelte";
 	import RelativeTime from "./RelativeTime.svelte";
 	import PrSection from "./PrSection.svelte";
@@ -10,6 +12,7 @@
 	type Props = {
 		onLogout: () => Promise<void>;
 		fetchPrs: () => Promise<ProcessedPrsResult & { hasMore: boolean }>;
+		fetchIssues: () => Promise<IssueListDto>;
 		getCachedPrs: () => Promise<CachedPrData | null>;
 		loadPrsWithCache: (minutes: number) => Promise<(ProcessedPrsResult & { hasMore: boolean }) | null>;
 		subscribeToMessages: (callback: (message: unknown) => void) => () => void;
@@ -17,13 +20,15 @@
 		getCurrentTabUrl?: () => Promise<string | null>;
 	};
 
-	const { onLogout, fetchPrs, getCachedPrs, loadPrsWithCache, subscribeToMessages, onNavigate, getCurrentTabUrl }: Props = $props();
+	const { onLogout, fetchPrs, fetchIssues, getCachedPrs, loadPrsWithCache, subscribeToMessages, onNavigate, getCurrentTabUrl }: Props = $props();
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let data = $state<(ProcessedPrsResult & { hasMore: boolean }) | null>(null);
 	let lastUpdatedAt = $state<string | undefined>(undefined);
 	let activeTabUrl = $state<string | null>(null);
+	let issueData = $state<IssueListDto | null>(null);
+	let issueError = $state<string | null>(null);
 
 	async function loadPrs(): Promise<void> {
 		loading = true;
@@ -35,6 +40,13 @@
 			error = e instanceof Error ? e.message : "Unknown error";
 		} finally {
 			loading = false;
+		}
+
+		try {
+			issueData = await fetchIssues();
+			issueError = null;
+		} catch (e: unknown) {
+			issueError = e instanceof Error ? e.message : "Failed to fetch issues";
 		}
 	}
 
@@ -75,6 +87,18 @@
 			} finally {
 				if (!cancelled) {
 					loading = false;
+				}
+			}
+
+			// Issue を取得
+			try {
+				const issues = await fetchIssues();
+				if (!cancelled) {
+					issueData = issues;
+				}
+			} catch (e: unknown) {
+				if (!cancelled) {
+					issueError = e instanceof Error ? e.message : "Failed to fetch issues";
 				}
 			}
 
@@ -166,6 +190,10 @@
 			</div>
 		{/if}
 		<PrSection title="My PRs" items={data.myPrs.items} {onNavigate} {activeTabUrl} />
+		{#if issueError}
+			<div class="error-banner"><p class="error-text">{issueError}</p></div>
+		{/if}
+		<IssueSection title="My Issues" items={issueData?.items ?? []} {onNavigate} {activeTabUrl} />
 		<PrSection title="Review Requests" items={data.reviewRequests.items} {onNavigate} {activeTabUrl} />
 	{/if}
 </main>

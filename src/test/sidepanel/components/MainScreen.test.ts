@@ -1,5 +1,6 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { IssueListDto } from "../../../domain/ports/issue-processor.port";
 import type { ProcessedPrsResult } from "../../../domain/ports/pr-processor.port";
 import MainScreen from "../../../sidepanel/components/MainScreen.svelte";
 import { resetChromeMock, setupChromeMock } from "../../mocks/chrome.mock";
@@ -26,10 +27,18 @@ function createMockSubscribeToMessages(): (callback: (message: unknown) => void)
 	return vi.fn((_callback: (message: unknown) => void) => unsubscribe);
 }
 
+function createMockFetchIssues(): () => Promise<IssueListDto> {
+	return vi.fn(async () => ({
+		items: [],
+		totalCount: 0,
+	}));
+}
+
 function createDefaultProps() {
 	return {
 		onLogout: vi.fn(async () => {}),
 		fetchPrs: createMockFetchPrs(),
+		fetchIssues: createMockFetchIssues(),
 		getCachedPrs: createMockGetCachedPrs(),
 		loadPrsWithCache: createMockLoadPrsWithCache(),
 		subscribeToMessages: createMockSubscribeToMessages(),
