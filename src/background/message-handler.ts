@@ -9,6 +9,7 @@ const ERROR_MESSAGES: Record<MessageType, string> = {
 	AUTH_STATUS: "Failed to check authentication status",
 	AUTH_DEVICE_CODE: "Device code request failed",
 	AUTH_DEVICE_POLL: "Device polling failed",
+	FETCH_ISSUES: "Failed to fetch issues",
 	FETCH_PRS: "Failed to fetch pull requests",
 	UPDATE_BADGE: "Failed to update badge",
 	NAVIGATE_TO_PR: "Navigation failed",
@@ -151,6 +152,14 @@ async function handleMessage(
 				}
 
 				sendResponse({ ok: true, data: undefined });
+				break;
+			}
+			case "FETCH_ISSUES": {
+				// Task 6 で実装予定。型の exhaustive check を通すための placeholder
+				sendResponse({
+					ok: false,
+					error: { code: "FETCH_ISSUES_ERROR", message: "Not implemented yet" },
+				});
 				break;
 			}
 			default: {

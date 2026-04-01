@@ -1,3 +1,4 @@
+import type { IssueListDto } from "../../domain/ports/issue-processor.port";
 import type { ProcessedPrsResult } from "../../domain/ports/pr-processor.port";
 import type { DeviceCodeResponse, PollResult } from "../../domain/types/auth";
 
@@ -6,6 +7,7 @@ export const MESSAGE_TYPES = [
 	"AUTH_STATUS",
 	"AUTH_DEVICE_CODE",
 	"AUTH_DEVICE_POLL",
+	"FETCH_ISSUES",
 	"FETCH_PRS",
 	"UPDATE_BADGE",
 	"NAVIGATE_TO_PR",
@@ -19,6 +21,7 @@ export type RequestMap = {
 	AUTH_STATUS: undefined;
 	AUTH_DEVICE_CODE: undefined;
 	AUTH_DEVICE_POLL: { deviceCode: string };
+	FETCH_ISSUES: undefined;
 	FETCH_PRS: undefined;
 	UPDATE_BADGE: { reviewRequestCount: number };
 	NAVIGATE_TO_PR: { url: string };
@@ -30,6 +33,7 @@ export type ResponseDataMap = {
 	AUTH_STATUS: { isAuthenticated: boolean };
 	AUTH_DEVICE_CODE: DeviceCodeResponse;
 	AUTH_DEVICE_POLL: PollResult;
+	FETCH_ISSUES: IssueListDto;
 	FETCH_PRS: ProcessedPrsResult & { hasMore: boolean };
 	UPDATE_BADGE: undefined;
 	NAVIGATE_TO_PR: undefined;
