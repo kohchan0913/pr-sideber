@@ -12,6 +12,7 @@ import { createBadgeUseCase } from "../shared/usecase/badge.usecase";
 import { WasmEpicProcessor } from "../wasm/epic-processor";
 import { WasmIssueProcessor } from "../wasm/issue-processor";
 import { WasmPrProcessor } from "../wasm/pr-processor";
+import { ClaudeSessionWatcher } from "./claude-session-watcher";
 import { createMessageHandler } from "./message-handler";
 import type { AppServices } from "./types";
 
@@ -119,6 +120,9 @@ export function initializeApp(): AppServices {
 			console.error("[bootstrap] Failed to start auto-refresh:", err);
 		}
 	});
+
+	const claudeSessionWatcher = new ClaudeSessionWatcher();
+	claudeSessionWatcher.startWatching();
 
 	let disposed = false;
 	const dispose = (): void => {
