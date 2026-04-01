@@ -1,10 +1,12 @@
 pub mod dto;
+pub mod epic_dto;
 pub mod error;
 pub mod issue_dto;
 pub mod issue_parser;
 pub mod parser;
 
 use crate::dto::{PrItemDto, PrListDto};
+use crate::epic_dto::EpicTreeDto;
 use crate::issue_dto::{IssueItemDto, IssueListDto};
 use wasm_bindgen::prelude::*;
 
@@ -72,6 +74,27 @@ pub fn process_issues(raw_json: &str) -> Result<JsValue, JsError> {
     usecase::issue_process::sort_issues_by_updated_at_desc(&mut issues);
 
     let dto = to_issue_list_dto(issues);
+    serde_wasm_bindgen::to_value(&dto).map_err(|e| JsError::new(&e.to_string()))
+}
+
+/// Issue + PR の JSON を受け取り、Epic ツリーを返す。
+#[wasm_bindgen(js_name = "processEpicTree")]
+pub fn process_epic_tree(issues_json: &str, prs_json: &str) -> Result<JsValue, JsError> {
+    let issues =
+        issue_parser::parse_issue_nodes(issues_json).map_err(|e| JsError::new(&e.to_string()))?;
+
+    let parsed_prs =
+        parser::parse_pull_request_nodes(prs_json).map_err(|e| JsError::new(&e.to_string()))?;
+
+    let all_prs = {
+        let processed =
+            usecase::process::process_pull_requests(parsed_prs.my_prs, parsed_prs.review_requests);
+        processed.my_prs
+    };
+
+    let tree = usecase::epic_process::build_epic_tree(issues, all_prs);
+
+    let dto = EpicTreeDto { roots: tree };
     serde_wasm_bindgen::to_value(&dto).map_err(|e| JsError::new(&e.to_string()))
 }
 
