@@ -132,4 +132,57 @@ describe("resolveWorkspaceResources", () => {
 		expect(result.prUrl).toBeNull();
 		expect(result.sessionUrl).toBeNull();
 	});
+
+	it("should find PR and session in grandchildren (recursive)", () => {
+		const subIssue: TreeNodeDto = {
+			kind: {
+				type: "issue",
+				number: 99,
+				title: "Sub issue",
+				url: "https://github.com/owner/repo/issues/99",
+				state: "OPEN",
+				labels: [],
+			},
+			children: [
+				createPrChild("https://github.com/owner/repo/pull/200", 200),
+				createSessionChild("https://claude.ai/code/deep-session", 42),
+			],
+			depth: 2,
+		};
+		const node = createIssueNode({ children: [subIssue] });
+		const result = resolveWorkspaceResources(node);
+		expect(result.prUrl).toBe("https://github.com/owner/repo/pull/200");
+		expect(result.sessionUrl).toBe("https://claude.ai/code/deep-session");
+	});
+
+	it("should find resources across multiple nesting levels", () => {
+		const deepChild: TreeNodeDto = {
+			kind: {
+				type: "issue",
+				number: 88,
+				title: "Deep issue",
+				url: "https://github.com/owner/repo/issues/88",
+				state: "OPEN",
+				labels: [],
+			},
+			children: [createSessionChild("https://claude.ai/code/deep", 42)],
+			depth: 3,
+		};
+		const midChild: TreeNodeDto = {
+			kind: {
+				type: "issue",
+				number: 77,
+				title: "Mid issue",
+				url: "https://github.com/owner/repo/issues/77",
+				state: "OPEN",
+				labels: [],
+			},
+			children: [createPrChild("https://github.com/owner/repo/pull/300", 300), deepChild],
+			depth: 2,
+		};
+		const node = createIssueNode({ children: [midChild] });
+		const result = resolveWorkspaceResources(node);
+		expect(result.prUrl).toBe("https://github.com/owner/repo/pull/300");
+		expect(result.sessionUrl).toBe("https://claude.ai/code/deep");
+	});
 });

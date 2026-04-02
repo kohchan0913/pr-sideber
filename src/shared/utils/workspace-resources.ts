@@ -7,8 +7,28 @@ export interface WorkspaceResources {
 	readonly sessionUrl: string | null;
 }
 
+interface MutableResult {
+	prUrl: string | null;
+	sessionUrl: string | null;
+}
+
+/** ツリーを再帰的に探索して最初の PR と Session を見つける */
+function findResources(node: TreeNodeDto, result: MutableResult): void {
+	for (const child of node.children) {
+		if (result.prUrl === null && child.kind.type === "pullRequest") {
+			result.prUrl = child.kind.url;
+		}
+		if (result.sessionUrl === null && child.kind.type === "session") {
+			result.sessionUrl = child.kind.url;
+		}
+		if (result.prUrl !== null && result.sessionUrl !== null) return;
+		findResources(child, result);
+		if (result.prUrl !== null && result.sessionUrl !== null) return;
+	}
+}
+
 /**
- * Issue ノードの子ノードから PR URL と Claude Session URL を抽出する。
+ * Issue ノードの子孫から PR URL と Claude Session URL を再帰的に抽出する。
  * 複数ある場合はツリー内の最初のものを選択する。
  */
 export function resolveWorkspaceResources(issueNode: TreeNodeDto): WorkspaceResources {
@@ -16,23 +36,13 @@ export function resolveWorkspaceResources(issueNode: TreeNodeDto): WorkspaceReso
 		throw new Error(`Expected issue node, got ${issueNode.kind.type}`);
 	}
 
-	let prUrl: string | null = null;
-	let sessionUrl: string | null = null;
-
-	for (const child of issueNode.children) {
-		if (prUrl === null && child.kind.type === "pullRequest") {
-			prUrl = child.kind.url;
-		}
-		if (sessionUrl === null && child.kind.type === "session") {
-			sessionUrl = child.kind.url;
-		}
-		if (prUrl !== null && sessionUrl !== null) break;
-	}
+	const result: MutableResult = { prUrl: null, sessionUrl: null };
+	findResources(issueNode, result);
 
 	return {
 		issueNumber: issueNode.kind.number,
 		issueUrl: issueNode.kind.url,
-		prUrl,
-		sessionUrl,
+		prUrl: result.prUrl,
+		sessionUrl: result.sessionUrl,
 	};
 }
