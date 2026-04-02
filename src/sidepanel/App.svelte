@@ -7,6 +7,7 @@
 	import type { createAuthUseCase } from "../shared/usecase/auth.usecase.js";
 	import type { createPrUseCase } from "../shared/usecase/pr.usecase.js";
 	import type { DeviceFlowController } from "../shared/usecase/device-flow.controller.js";
+	import type { WorkspaceResources } from "../shared/utils/workspace-resources";
 
 	type Props = {
 		authUseCase: Pick<ReturnType<typeof createAuthUseCase>, "checkAuth" | "logout">;
@@ -16,9 +17,10 @@
 		deviceFlowController: DeviceFlowController;
 		subscribeToMessages: (callback: (message: unknown) => void) => () => void;
 		onNavigate?: (url: string) => void;
+		onOpenWorkspace?: (resources: WorkspaceResources) => void;
 		getCurrentTabUrl?: () => Promise<string | null>;
 	};
-	const { authUseCase, prUseCase, fetchEpicTree, getClaudeSessions, deviceFlowController, subscribeToMessages, onNavigate, getCurrentTabUrl }: Props = $props();
+	const { authUseCase, prUseCase, fetchEpicTree, getClaudeSessions, deviceFlowController, subscribeToMessages, onNavigate, onOpenWorkspace, getCurrentTabUrl }: Props = $props();
 
 	let authenticated = $state(false);
 	let loading = $state(true);
@@ -58,7 +60,7 @@
 		<p>Loading...</p>
 	</div>
 {:else if authenticated}
-	<MainScreen onLogout={handleLogout} fetchPrs={() => prUseCase.fetchPrs()} {fetchEpicTree} {getClaudeSessions} getCachedPrs={() => prUseCase.getCachedPrs()} loadPrsWithCache={(minutes: number) => prUseCase.loadPrsWithCache(minutes)} {subscribeToMessages} {onNavigate} {getCurrentTabUrl} />
+	<MainScreen onLogout={handleLogout} fetchPrs={() => prUseCase.fetchPrs()} {fetchEpicTree} {getClaudeSessions} getCachedPrs={() => prUseCase.getCachedPrs()} loadPrsWithCache={(minutes: number) => prUseCase.loadPrsWithCache(minutes)} {subscribeToMessages} {onNavigate} {onOpenWorkspace} {getCurrentTabUrl} />
 {:else}
 	<LoginScreen controller={deviceFlowController} />
 {/if}

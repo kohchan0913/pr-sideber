@@ -16,6 +16,7 @@ const ERROR_MESSAGES: Record<MessageType, string> = {
 	UPDATE_BADGE: "Failed to update badge",
 	NAVIGATE_TO_PR: "Navigation failed",
 	GET_CLAUDE_SESSIONS: "Failed to get Claude sessions",
+	OPEN_WORKSPACE: "Failed to open workspace",
 };
 
 /** deviceCode の長さ制限 */
@@ -34,6 +35,7 @@ export function createMessageHandler(
 		| "badge"
 		| "tabNavigation"
 		| "claudeSessionWatcher"
+		| "workspaceLayout"
 	>,
 ) {
 	return (
@@ -67,6 +69,7 @@ async function handleMessage(
 		| "badge"
 		| "tabNavigation"
 		| "claudeSessionWatcher"
+		| "workspaceLayout"
 	>,
 	message: RequestMessage<MessageType>,
 	sendResponse: (response: ResponseMessage<MessageType>) => void,
@@ -208,6 +211,12 @@ async function handleMessage(
 			case "GET_CLAUDE_SESSIONS": {
 				const sessions = await services.claudeSessionWatcher.getSessions();
 				sendResponse({ ok: true, data: sessions });
+				break;
+			}
+			case "OPEN_WORKSPACE": {
+				const msg = message as RequestMessage<"OPEN_WORKSPACE">;
+				await services.workspaceLayout.openWorkspace(msg.payload);
+				sendResponse({ ok: true, data: undefined });
 				break;
 			}
 			default: {

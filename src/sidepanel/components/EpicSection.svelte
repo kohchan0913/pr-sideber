@@ -1,14 +1,16 @@
 <script lang="ts">
 	import type { EpicTreeDto } from "../../domain/ports/epic-processor.port";
+	import type { WorkspaceResources } from "../../shared/utils/workspace-resources";
 	import TreeNode from "./TreeNode.svelte";
 
 	type Props = {
 		tree: EpicTreeDto | null;
 		activeTabUrl?: string | null;
 		onNavigate?: (url: string) => void;
+		onOpenWorkspace?: (resources: WorkspaceResources) => void;
 	};
 
-	const { tree, activeTabUrl, onNavigate }: Props = $props();
+	const { tree, activeTabUrl, onNavigate, onOpenWorkspace }: Props = $props();
 </script>
 
 {#if tree}
@@ -17,7 +19,7 @@
 			<p class="empty-message">Epic がありません</p>
 		{:else}
 			{#each tree.roots as root (root.kind.type === "epic" ? `epic-${root.kind.number}` : root.kind.type === "issue" ? `issue-${root.kind.number}` : root.kind.type === "pullRequest" ? `pr-${root.kind.number}` : `session-${root.depth}`)}
-				<TreeNode node={root} {activeTabUrl} {onNavigate} />
+				<TreeNode node={root} {activeTabUrl} {onNavigate} {onOpenWorkspace} />
 			{/each}
 		{/if}
 	</section>

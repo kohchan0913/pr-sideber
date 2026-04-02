@@ -9,6 +9,7 @@ import { createAuthUseCase } from "../shared/usecase/auth.usecase";
 import { createDeviceFlowController } from "../shared/usecase/device-flow.controller";
 import { createPrUseCase } from "../shared/usecase/pr.usecase";
 import { createTabNavigationUseCase } from "../shared/usecase/tab-navigation.usecase";
+import type { WorkspaceResources } from "../shared/utils/workspace-resources";
 import App from "./App.svelte";
 
 const target = document.getElementById("app");
@@ -49,6 +50,17 @@ const app = mount(App, {
 		deviceFlowController,
 		subscribeToMessages,
 		onNavigate: (url: string) => tabNavigationUseCase.navigateToPr(url),
+		onOpenWorkspace: async (resources: WorkspaceResources) => {
+			const response = await chromeSendMessage("OPEN_WORKSPACE", {
+				issueNumber: resources.issueNumber,
+				issueUrl: resources.issueUrl,
+				prUrl: resources.prUrl,
+				sessionUrl: resources.sessionUrl,
+			});
+			if (!response.ok) {
+				console.error("Failed to open workspace:", response.error.message);
+			}
+		},
 		getCurrentTabUrl: () => tabNavigationAdapter.getCurrentTabUrl(),
 	},
 });

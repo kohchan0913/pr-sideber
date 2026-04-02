@@ -7,6 +7,7 @@
 	import { isCacheUpdatedEvent, isTabUrlChangedEvent } from "../../shared/types/events";
 	import { extractPrIssueLinks, movePrsToLinkedIssues } from "../usecase/merge-prs-to-issues";
 	import { mergeSessionsIntoTree } from "../usecase/merge-sessions";
+	import type { WorkspaceResources } from "../../shared/utils/workspace-resources";
 	import EpicSection from "./EpicSection.svelte";
 	import LogoutButton from "./LogoutButton.svelte";
 	import RelativeTime from "./RelativeTime.svelte";
@@ -21,10 +22,11 @@
 		loadPrsWithCache: (minutes: number) => Promise<(ProcessedPrsResult & { hasMore: boolean }) | null>;
 		subscribeToMessages: (callback: (message: unknown) => void) => () => void;
 		onNavigate?: (url: string) => void;
+		onOpenWorkspace?: (resources: WorkspaceResources) => void;
 		getCurrentTabUrl?: () => Promise<string | null>;
 	};
 
-	const { onLogout, fetchPrs, fetchEpicTree, getClaudeSessions, getCachedPrs, loadPrsWithCache, subscribeToMessages, onNavigate, getCurrentTabUrl }: Props = $props();
+	const { onLogout, fetchPrs, fetchEpicTree, getClaudeSessions, getCachedPrs, loadPrsWithCache, subscribeToMessages, onNavigate, onOpenWorkspace, getCurrentTabUrl }: Props = $props();
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -203,7 +205,7 @@
 		{#if epicError}
 			<div class="error-banner"><p class="error-text">{epicError}</p></div>
 		{/if}
-		<EpicSection tree={epicData} {onNavigate} {activeTabUrl} />
+		<EpicSection tree={epicData} {onNavigate} {onOpenWorkspace} {activeTabUrl} />
 		<PrSection title="Review Requests" items={data.reviewRequests.items} {onNavigate} {activeTabUrl} />
 	{/if}
 </main>

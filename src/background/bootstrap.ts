@@ -15,6 +15,7 @@ import { WasmPrProcessor } from "../wasm/pr-processor";
 import { ClaudeSessionWatcher } from "./claude-session-watcher";
 import { createMessageHandler } from "./message-handler";
 import type { AppServices } from "./types";
+import { createWorkspaceLayoutUseCase } from "./workspace-layout.usecase";
 
 export type { AppServices };
 
@@ -50,6 +51,29 @@ export function initializeApp(): AppServices {
 	const claudeSessionWatcher = new ClaudeSessionWatcher();
 	claudeSessionWatcher.startWatching();
 
+	const workspaceLayout = createWorkspaceLayoutUseCase({
+		findTabByUrl: async (queryPattern: string, matchUrl: string) => {
+			const matchTabs = await chrome.tabs.query({ url: queryPattern });
+			for (const tab of matchTabs) {
+				if (tab.id == null || !tab.url) continue;
+				if (tab.url.startsWith(matchUrl)) return tab.id;
+			}
+			return null;
+		},
+		activateTab: (tabId: number) => tabNavigation.activateTab(tabId),
+		openTabInWindow: async (url: string, windowId: number) => {
+			await chrome.tabs.create({ url, windowId });
+		},
+		findWindowByTabPattern: async (queryPattern: string) => {
+			const matchTabs = await chrome.tabs.query({ url: queryPattern });
+			return matchTabs[0]?.windowId ?? null;
+		},
+		getCurrentWindowId: async () => {
+			const win = await chrome.windows.getCurrent();
+			return win.id ?? 0;
+		},
+	});
+
 	const handler = createMessageHandler({
 		auth,
 		epicProcessor,
@@ -60,6 +84,7 @@ export function initializeApp(): AppServices {
 		badge,
 		tabNavigation,
 		claudeSessionWatcher,
+		workspaceLayout,
 	});
 	chrome.runtime.onMessage.addListener(handler);
 
@@ -154,6 +179,7 @@ export function initializeApp(): AppServices {
 		badge,
 		tabNavigation,
 		claudeSessionWatcher,
+		workspaceLayout,
 		dispose,
 	};
 	return services;

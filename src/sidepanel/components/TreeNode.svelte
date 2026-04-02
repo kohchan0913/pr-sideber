@@ -1,17 +1,21 @@
 <script lang="ts">
 	import type { TreeNodeDto } from "../../domain/ports/epic-processor.port";
 	import { safeUrl } from "../../shared/utils/url";
+	import type { WorkspaceResources } from "../../shared/utils/workspace-resources";
+	import { resolveWorkspaceResources } from "../../shared/utils/workspace-resources";
 	import TreeNode from "./TreeNode.svelte";
 
 	type Props = {
 		node: TreeNodeDto;
 		activeTabUrl?: string | null;
 		onNavigate?: (url: string) => void;
+		onOpenWorkspace?: (resources: WorkspaceResources) => void;
 	};
 
-	const { node, activeTabUrl, onNavigate }: Props = $props();
+	const { node, activeTabUrl, onNavigate, onOpenWorkspace }: Props = $props();
 
 	let open = $state(true);
+	let hovered = $state(false);
 	const hasChildren = $derived(node.children.length > 0);
 	const MAX_INDENT_DEPTH = 3;
 	const displayDepth = $derived(Math.min(node.depth, MAX_INDENT_DEPTH));
@@ -36,6 +40,14 @@
 		event.preventDefault();
 		onNavigate?.(url);
 	}
+
+	function handleOpenWorkspace(event: MouseEvent): void {
+		event.stopPropagation();
+		event.preventDefault();
+		if (node.kind.type !== "issue" || !onOpenWorkspace) return;
+		const resources = resolveWorkspaceResources(node);
+		onOpenWorkspace(resources);
+	}
 </script>
 
 <div
@@ -57,7 +69,12 @@
 	{:else if node.kind.type === "issue"}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="node-content" onclick={(e) => handleNavigate(e, node.kind.type === "issue" ? node.kind.url : "")}>
+		<div
+			class="node-content"
+			onclick={(e) => handleNavigate(e, node.kind.type === "issue" ? node.kind.url : "")}
+			onmouseenter={() => hovered = true}
+			onmouseleave={() => hovered = false}
+		>
 			{#if isDeepNested}<span class="deep-indicator">&#8627;</span>{/if}
 			{#if hasChildren}
 				<button class="inline-toggle" onclick={(e) => { e.stopPropagation(); toggle(); }}>
@@ -71,6 +88,13 @@
 			<span class="node-number">#{node.kind.number}</span>
 			{#if node.kind.state === "CLOSED"}
 				<span class="state-badge closed">Closed</span>
+			{/if}
+			{#if hovered && onOpenWorkspace}
+				<button
+					class="workspace-btn"
+					title="ワークスペースを開く"
+					onclick={handleOpenWorkspace}
+				>&#10697;</button>
 			{/if}
 			{#if node.kind.labels.length > 0}
 				<div class="labels">
@@ -127,7 +151,7 @@
 	{#if open && hasChildren}
 		<div class="children">
 			{#each node.children as child (child.kind.type === "epic" ? `epic-${child.kind.number}` : child.kind.type === "issue" ? `issue-${child.kind.number}` : child.kind.type === "pullRequest" ? `pr-${child.kind.number}` : `session-${child.kind.type}`)}
-				<TreeNode node={child} {activeTabUrl} {onNavigate} />
+				<TreeNode node={child} {activeTabUrl} {onNavigate} {onOpenWorkspace} />
 			{/each}
 		</div>
 	{/if}
@@ -311,6 +335,24 @@
 		border-radius: 10px;
 		color: #fff;
 		line-height: 1.4;
+	}
+
+	.workspace-btn {
+		background: #30363d;
+		border: 1px solid #484f58;
+		border-radius: 4px;
+		padding: 0.0625rem 0.375rem;
+		color: #8b949e;
+		cursor: pointer;
+		font-size: 0.75rem;
+		flex-shrink: 0;
+		line-height: 1;
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.workspace-btn:hover {
+		background: #484f58;
+		color: #e6edf3;
 	}
 
 </style>
