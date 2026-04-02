@@ -53,17 +53,24 @@ export function initializeApp(): AppServices {
 
 	const workspaceLayout = createWorkspaceLayoutUseCase({
 		findTabByUrl: async (queryPattern: string, matchUrl: string) => {
-			const tabs = await chrome.tabs.query({ url: queryPattern });
-			for (const tab of tabs) {
+			const matchTabs = await chrome.tabs.query({ url: queryPattern });
+			for (const tab of matchTabs) {
 				if (tab.id == null || !tab.url) continue;
 				if (tab.url.startsWith(matchUrl)) return tab.id;
 			}
 			return null;
 		},
 		activateTab: (tabId: number) => tabNavigation.activateTab(tabId),
-		openNewTab: async (url: string) => {
-			// GitHub URL 以外 (claude.ai, chrome-extension://) も開く必要がある
-			await chrome.tabs.create({ url });
+		openTabInWindow: async (url: string, windowId: number) => {
+			await chrome.tabs.create({ url, windowId });
+		},
+		findWindowByTabPattern: async (queryPattern: string) => {
+			const matchTabs = await chrome.tabs.query({ url: queryPattern });
+			return matchTabs[0]?.windowId ?? null;
+		},
+		getCurrentWindowId: async () => {
+			const win = await chrome.windows.getCurrent();
+			return win.id ?? 0;
 		},
 	});
 

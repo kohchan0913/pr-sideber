@@ -64,6 +64,7 @@ type ChromeMock = {
 		update: ReturnType<typeof vi.fn>;
 		create: ReturnType<typeof vi.fn>;
 		get: ReturnType<typeof vi.fn>;
+		getCurrent: ReturnType<typeof vi.fn>;
 	};
 	system: {
 		display: {
@@ -139,6 +140,7 @@ function createChromeMock(): ChromeMock {
 			update: vi.fn(),
 			create: vi.fn(),
 			get: vi.fn(),
+			getCurrent: vi.fn().mockResolvedValue({ id: 1 }),
 		},
 		system: {
 			display: {
