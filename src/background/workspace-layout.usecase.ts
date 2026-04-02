@@ -1,5 +1,3 @@
-import type { ScreenBounds, WindowManagerPort } from "../domain/ports/window-manager.port";
-
 export interface WorkspaceOpenRequest {
 	readonly issueNumber: number;
 	readonly issueUrl: string;
@@ -7,66 +5,37 @@ export interface WorkspaceOpenRequest {
 	readonly sessionUrl: string | null;
 }
 
-interface WorkspaceLayout {
-	readonly claude: ScreenBounds;
-	readonly issue: ScreenBounds;
-	readonly pr: ScreenBounds;
-}
-
-export function calculateLayout(screen: ScreenBounds): WorkspaceLayout {
-	const halfWidth = Math.floor(screen.width / 2);
-	const halfHeight = Math.floor(screen.height / 2);
-
-	return {
-		claude: {
-			left: screen.left,
-			top: screen.top,
-			width: halfWidth,
-			height: screen.height,
-		},
-		issue: {
-			left: screen.left + halfWidth,
-			top: screen.top,
-			width: screen.width - halfWidth,
-			height: halfHeight,
-		},
-		pr: {
-			left: screen.left + halfWidth,
-			top: screen.top + halfHeight,
-			width: screen.width - halfWidth,
-			height: screen.height - halfHeight,
-		},
-	};
+/** タブ操作に必要な最小インターフェース */
+export interface WorkspaceTabOps {
+	readonly findTabByUrl: (queryPattern: string, matchUrl: string) => Promise<number | null>;
+	readonly activateTab: (tabId: number) => Promise<void>;
+	readonly openNewTab: (url: string) => Promise<void>;
 }
 
 function placeholderUrl(type: "pr" | "session", issueNumber: number): string {
 	return chrome.runtime.getURL(`placeholder.html?type=${type}&issue=${issueNumber}`);
 }
 
-async function openOrReuseWindow(
+/**
+ * URL に一致する既存タブを探してフォーカス。なければ新しいタブとして開く。
+ * ウィンドウの作成・移動・リサイズは一切行わない。
+ */
+async function focusOrOpenTab(
 	url: string,
 	queryPattern: string,
-	bounds: ScreenBounds,
-	wm: WindowManagerPort,
+	tabs: WorkspaceTabOps,
 ): Promise<void> {
-	const existing = await wm.findTab(queryPattern, url);
-	if (existing) {
-		if (existing.windowTabCount === 1) {
-			await wm.moveWindowToBounds(existing.windowId, bounds);
-		} else {
-			await wm.moveTabToNewWindow(existing.tabId, bounds);
-		}
+	const existingTabId = await tabs.findTabByUrl(queryPattern, url);
+	if (existingTabId !== null) {
+		await tabs.activateTab(existingTabId);
 	} else {
-		await wm.createWindow(url, bounds);
+		await tabs.openNewTab(url);
 	}
 }
 
-export function createWorkspaceLayoutUseCase(windowManager: WindowManagerPort) {
+export function createWorkspaceLayoutUseCase(tabs: WorkspaceTabOps) {
 	return {
 		openWorkspace: async (request: WorkspaceOpenRequest): Promise<void> => {
-			const screen = await windowManager.getScreenWorkArea();
-			const layout = calculateLayout(screen);
-
 			const claudeUrl = request.sessionUrl ?? placeholderUrl("session", request.issueNumber);
 			const claudePattern = request.sessionUrl
 				? "*://claude.ai/code/*"
@@ -79,9 +48,9 @@ export function createWorkspaceLayoutUseCase(windowManager: WindowManagerPort) {
 				? "https://github.com/*/*/pull/*"
 				: `chrome-extension://${chrome.runtime.id}/*`;
 
-			await openOrReuseWindow(claudeUrl, claudePattern, layout.claude, windowManager);
-			await openOrReuseWindow(request.issueUrl, issuePattern, layout.issue, windowManager);
-			await openOrReuseWindow(prUrl, prPattern, layout.pr, windowManager);
+			await focusOrOpenTab(claudeUrl, claudePattern, tabs);
+			await focusOrOpenTab(request.issueUrl, issuePattern, tabs);
+			await focusOrOpenTab(prUrl, prPattern, tabs);
 		},
 	};
 }

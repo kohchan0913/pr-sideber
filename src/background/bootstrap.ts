@@ -4,7 +4,6 @@ import { ChromeIdentityAdapter } from "../adapter/chrome/identity.adapter";
 import { createOAuthConfig } from "../adapter/chrome/oauth.config";
 import { ChromeStorageAdapter } from "../adapter/chrome/storage.adapter";
 import { TabNavigationAdapter } from "../adapter/chrome/tab-navigation.adapter";
-import { WindowManagerAdapter } from "../adapter/chrome/window-manager.adapter";
 import { GitHubGraphQLClient } from "../adapter/github/graphql-client";
 import { IssueGraphQLClient } from "../adapter/github/issue-graphql-client";
 import { GitHubApiError } from "../shared/types/errors";
@@ -52,8 +51,18 @@ export function initializeApp(): AppServices {
 	const claudeSessionWatcher = new ClaudeSessionWatcher();
 	claudeSessionWatcher.startWatching();
 
-	const windowManager = new WindowManagerAdapter();
-	const workspaceLayout = createWorkspaceLayoutUseCase(windowManager);
+	const workspaceLayout = createWorkspaceLayoutUseCase({
+		findTabByUrl: async (queryPattern: string, matchUrl: string) => {
+			const tabs = await chrome.tabs.query({ url: queryPattern });
+			for (const tab of tabs) {
+				if (tab.id == null || !tab.url) continue;
+				if (tab.url.startsWith(matchUrl)) return tab.id;
+			}
+			return null;
+		},
+		activateTab: (tabId: number) => tabNavigation.activateTab(tabId),
+		openNewTab: (url: string) => tabNavigation.openNewTab(url),
+	});
 
 	const handler = createMessageHandler({
 		auth,
