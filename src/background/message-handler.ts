@@ -16,6 +16,7 @@ const ERROR_MESSAGES: Record<MessageType, string> = {
 	UPDATE_BADGE: "Failed to update badge",
 	NAVIGATE_TO_PR: "Navigation failed",
 	GET_CLAUDE_SESSIONS: "Failed to get Claude sessions",
+	OPEN_WORKSPACE: "Failed to open workspace",
 };
 
 /** deviceCode の長さ制限 */
@@ -208,6 +209,14 @@ async function handleMessage(
 			case "GET_CLAUDE_SESSIONS": {
 				const sessions = await services.claudeSessionWatcher.getSessions();
 				sendResponse({ ok: true, data: sessions });
+				break;
+			}
+			case "OPEN_WORKSPACE": {
+				// ハンドラーは Task 6 で実装。一時的なスタブ
+				sendResponse({
+					ok: false,
+					error: { code: "OPEN_WORKSPACE_ERROR", message: "Not implemented yet" },
+				});
 				break;
 			}
 			default: {
