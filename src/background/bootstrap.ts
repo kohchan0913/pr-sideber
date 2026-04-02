@@ -61,7 +61,10 @@ export function initializeApp(): AppServices {
 			return null;
 		},
 		activateTab: (tabId: number) => tabNavigation.activateTab(tabId),
-		openNewTab: (url: string) => tabNavigation.openNewTab(url),
+		openNewTab: async (url: string) => {
+			// GitHub URL 以外 (claude.ai, chrome-extension://) も開く必要がある
+			await chrome.tabs.create({ url });
+		},
 	});
 
 	const handler = createMessageHandler({
