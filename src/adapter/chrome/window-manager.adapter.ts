@@ -35,6 +35,16 @@ export class WindowManagerAdapter implements WindowManagerPort {
 		return null;
 	}
 
+	async getWindowBounds(windowId: number): Promise<ScreenBounds> {
+		const win = await chrome.windows.get(windowId);
+		return {
+			left: win.left ?? 0,
+			top: win.top ?? 0,
+			width: win.width ?? 0,
+			height: win.height ?? 0,
+		};
+	}
+
 	async createWindow(url: string, bounds: ScreenBounds): Promise<void> {
 		await chrome.windows.create({
 			url,

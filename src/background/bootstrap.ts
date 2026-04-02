@@ -4,6 +4,7 @@ import { ChromeIdentityAdapter } from "../adapter/chrome/identity.adapter";
 import { createOAuthConfig } from "../adapter/chrome/oauth.config";
 import { ChromeStorageAdapter } from "../adapter/chrome/storage.adapter";
 import { TabNavigationAdapter } from "../adapter/chrome/tab-navigation.adapter";
+import { WindowManagerAdapter } from "../adapter/chrome/window-manager.adapter";
 import { GitHubGraphQLClient } from "../adapter/github/graphql-client";
 import { IssueGraphQLClient } from "../adapter/github/issue-graphql-client";
 import { GitHubApiError } from "../shared/types/errors";
@@ -15,6 +16,7 @@ import { WasmPrProcessor } from "../wasm/pr-processor";
 import { ClaudeSessionWatcher } from "./claude-session-watcher";
 import { createMessageHandler } from "./message-handler";
 import type { AppServices } from "./types";
+import { createWorkspaceArrangeUseCase } from "./workspace-arrange.usecase";
 import { createWorkspaceLayoutUseCase } from "./workspace-layout.usecase";
 
 export type { AppServices };
@@ -74,6 +76,17 @@ export function initializeApp(): AppServices {
 		},
 	});
 
+	const STORAGE_KEY_WORKSPACE_LAYOUT = "workspaceLayoutEnabled";
+	const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
+	const windowManager = new WindowManagerAdapter();
+	const workspaceArrange = createWorkspaceArrangeUseCase(windowManager, {
+		getEnabled: async () => {
+			const value = await storage.get(STORAGE_KEY_WORKSPACE_LAYOUT, isBoolean);
+			// 未設定 (null) 時はデフォルト有効
+			return value ?? true;
+		},
+	});
+
 	const handler = createMessageHandler({
 		auth,
 		epicProcessor,
@@ -85,6 +98,7 @@ export function initializeApp(): AppServices {
 		tabNavigation,
 		claudeSessionWatcher,
 		workspaceLayout,
+		workspaceArrange,
 	});
 	chrome.runtime.onMessage.addListener(handler);
 
@@ -180,6 +194,7 @@ export function initializeApp(): AppServices {
 		tabNavigation,
 		claudeSessionWatcher,
 		workspaceLayout,
+		workspaceArrange,
 		dispose,
 	};
 	return services;

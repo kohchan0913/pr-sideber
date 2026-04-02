@@ -25,6 +25,9 @@ export interface WindowManagerPort {
 	/** 指定 URL と位置で新しいウィンドウを作成する */
 	createWindow(url: string, bounds: ScreenBounds): Promise<void>;
 
+	/** 指定ウィンドウの現在位置・サイズを取得する */
+	getWindowBounds(windowId: number): Promise<ScreenBounds>;
+
 	/** 既存ウィンドウを指定位置に移動・リサイズする */
 	moveWindowToBounds(windowId: number, bounds: ScreenBounds): Promise<void>;
 

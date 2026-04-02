@@ -25,5 +25,8 @@ export type AppServices = {
 	readonly workspaceLayout: {
 		readonly openWorkspace: (request: WorkspaceOpenRequest) => Promise<void>;
 	};
+	readonly workspaceArrange: {
+		readonly arrangeWorkspace: (request: WorkspaceOpenRequest) => Promise<void>;
+	};
 	readonly dispose: () => void;
 };

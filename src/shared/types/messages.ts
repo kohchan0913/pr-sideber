@@ -37,6 +37,7 @@ export type RequestMap = {
 		issueUrl: string;
 		prUrl: string | null;
 		sessionUrl: string | null;
+		arrange?: boolean;
 	};
 };
 
