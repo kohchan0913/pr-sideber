@@ -89,7 +89,8 @@ export class WindowManagerAdapter implements WindowManagerPort {
 		}
 	}
 
-	async createTabInWindow(url: string, windowId: number): Promise<void> {
-		await chrome.tabs.create({ url, windowId, active: false });
+	async createTabInWindow(url: string, windowId: number): Promise<{ tabId: number }> {
+		const tab = await chrome.tabs.create({ url, windowId, active: false });
+		return { tabId: tab.id ?? 0 };
 	}
 }

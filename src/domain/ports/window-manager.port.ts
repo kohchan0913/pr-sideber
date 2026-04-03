@@ -38,5 +38,5 @@ export interface WindowManagerPort {
 	activateTab(tabId: number): Promise<void>;
 
 	/** 指定ウィンドウに新しいタブを作成する (バックグラウンドで開く) */
-	createTabInWindow(url: string, windowId: number): Promise<void>;
+	createTabInWindow(url: string, windowId: number): Promise<{ tabId: number }>;
 }

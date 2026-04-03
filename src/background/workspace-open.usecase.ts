@@ -58,59 +58,42 @@ function isWithinTolerance(current: ScreenBounds, target: ScreenBounds): boolean
 	);
 }
 
-interface ResourceEntry {
-	readonly url: string | null;
-	readonly queryPattern: string;
-	readonly bounds: ScreenBounds;
+interface CollectedTab {
+	readonly tabId: number;
+	readonly windowId: number;
+	readonly windowTabCount: number;
 }
 
-/** arrange ON: 単一リソースをウィンドウ配置する */
-async function placeResourceArranged(
-	resource: ResourceEntry,
-	windowManager: WindowManagerPort,
-): Promise<void> {
-	if (resource.url === null) return;
-
-	const tabInfo = await windowManager.findTab(resource.queryPattern, resource.url);
-
-	if (tabInfo === null) {
-		await windowManager.createWindow(resource.url, resource.bounds);
-		return;
-	}
-
-	if (tabInfo.windowTabCount > 1) {
-		await windowManager.moveTabToNewWindow(tabInfo.tabId, resource.bounds);
-		return;
-	}
-
-	// 単独タブウィンドウ: 配置済みチェック後に移動
-	const currentBounds = await windowManager.getWindowBounds(tabInfo.windowId);
-	if (isWithinTolerance(currentBounds, resource.bounds)) return;
-
-	await windowManager.moveWindowToBounds(tabInfo.windowId, resource.bounds);
-}
-
-interface SimpleResourceEntry {
-	readonly url: string | null;
-	readonly queryPattern: string;
-}
-
-/** arrange OFF: 既存タブをフォーカスするか、senderWindowId にタブを作成する */
-async function placeResourceSimple(
-	resource: SimpleResourceEntry,
+/** 既存タブを探すか、なければ senderWindowId に新規作成する。タブ情報を返す */
+async function findOrCreateTab(
+	url: string,
+	queryPattern: string,
 	senderWindowId: number,
 	windowManager: WindowManagerPort,
+): Promise<CollectedTab> {
+	const existing = await windowManager.findTab(queryPattern, url);
+	if (existing !== null) {
+		await windowManager.activateTab(existing.tabId);
+		return existing;
+	}
+	const created = await windowManager.createTabInWindow(url, senderWindowId);
+	// 作成したタブは senderWindowId にいる（複数タブウィンドウ扱い）
+	return { tabId: created.tabId, windowId: senderWindowId, windowTabCount: 2 };
+}
+
+/** 収集済みタブ情報を使ってウィンドウを配置する */
+async function arrangeTab(
+	tab: CollectedTab,
+	bounds: ScreenBounds,
+	windowManager: WindowManagerPort,
 ): Promise<void> {
-	if (resource.url === null) return;
-
-	const tabInfo = await windowManager.findTab(resource.queryPattern, resource.url);
-
-	if (tabInfo !== null) {
-		await windowManager.activateTab(tabInfo.tabId);
+	if (tab.windowTabCount > 1) {
+		await windowManager.moveTabToNewWindow(tab.tabId, bounds);
 		return;
 	}
-
-	await windowManager.createTabInWindow(resource.url, senderWindowId);
+	const currentBounds = await windowManager.getWindowBounds(tab.windowId);
+	if (isWithinTolerance(currentBounds, bounds)) return;
+	await windowManager.moveWindowToBounds(tab.windowId, bounds);
 }
 
 export function createWorkspaceOpenUseCase(
@@ -120,26 +103,28 @@ export function createWorkspaceOpenUseCase(
 	return {
 		openWorkspace: async (request: WorkspaceOpenRequest): Promise<void> => {
 			const resources = [
-				{
-					url: request.sessionUrl,
-					queryPattern: "*://claude.ai/code/*",
-				},
-				{
-					url: request.issueUrl,
-					queryPattern: "https://github.com/*/*/issues/*",
-				},
-				{
-					url: request.prUrl,
-					queryPattern: "https://github.com/*/*/pull/*",
-				},
+				{ url: request.sessionUrl, queryPattern: "*://claude.ai/code/*" },
+				{ url: request.issueUrl, queryPattern: "https://github.com/*/*/issues/*" },
+				{ url: request.prUrl, queryPattern: "https://github.com/*/*/pull/*" },
 			] as const;
 
-			// Step 1: 常にタブを開く/フォーカスする（同じウィンドウ）
+			// Step 1: タブを開く/フォーカスする（同じウィンドウ）+ タブ情報を収集
+			const tabs: (CollectedTab | null)[] = [];
 			for (const resource of resources) {
-				await placeResourceSimple(resource, request.senderWindowId, windowManager);
+				if (resource.url === null) {
+					tabs.push(null);
+					continue;
+				}
+				const tab = await findOrCreateTab(
+					resource.url,
+					resource.queryPattern,
+					request.senderWindowId,
+					windowManager,
+				);
+				tabs.push(tab);
 			}
 
-			// Step 2: 設定が ON ならウィンドウを3分割配置する
+			// Step 2: 設定が ON なら収集したタブを3分割配置する
 			const arrangeEnabled = await settings.getArrangeEnabled();
 			if (!arrangeEnabled) return;
 
@@ -147,8 +132,10 @@ export function createWorkspaceOpenUseCase(
 			const layout = calculateThreePanelLayout(workArea);
 			const boundsMap = [layout.left, layout.topRight, layout.bottomRight] as const;
 
-			for (let i = 0; i < resources.length; i++) {
-				await placeResourceArranged({ ...resources[i], bounds: boundsMap[i] }, windowManager);
+			for (let i = 0; i < tabs.length; i++) {
+				const tab = tabs[i];
+				if (tab === null) continue;
+				await arrangeTab(tab, boundsMap[i], windowManager);
 			}
 		},
 	};
