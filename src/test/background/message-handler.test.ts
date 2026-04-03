@@ -735,4 +735,68 @@ describe("createMessageHandler", () => {
 			expect(response).toEqual({ ok: true, data: undefined });
 		});
 	});
+
+	describe("OPEN_WORKSPACE", () => {
+		let mockWorkspaceLayout: { openWorkspace: ReturnType<typeof vi.fn> };
+		let mockWorkspaceArrange: { arrangeWorkspace: ReturnType<typeof vi.fn> };
+
+		beforeEach(() => {
+			vi.useFakeTimers();
+			mockWorkspaceLayout = { openWorkspace: vi.fn().mockResolvedValue(undefined) };
+			mockWorkspaceArrange = { arrangeWorkspace: vi.fn().mockResolvedValue(undefined) };
+			services = {
+				auth: mockAuth,
+				workspaceLayout: mockWorkspaceLayout,
+				workspaceArrange: mockWorkspaceArrange,
+			} as unknown as AppServices;
+			handler = createMessageHandler(services);
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it("should wait 300ms between openWorkspace and arrangeWorkspace when arrange is true", async () => {
+			const sendResponse = vi.fn();
+			const payload = {
+				issueNumber: 42,
+				issueUrl: "https://github.com/owner/repo/issues/42",
+				prUrl: "https://github.com/owner/repo/pull/123",
+				sessionUrl: "https://claude.ai/code/session-1",
+				arrange: true,
+			};
+
+			handler({ type: "OPEN_WORKSPACE", payload }, createTrustedSender(), sendResponse);
+
+			// openWorkspace の Promise を解決させる
+			await vi.advanceTimersByTimeAsync(0);
+
+			// openWorkspace は呼ばれたが、arrangeWorkspace はまだ呼ばれていない
+			expect(mockWorkspaceLayout.openWorkspace).toHaveBeenCalledWith(payload);
+			expect(mockWorkspaceArrange.arrangeWorkspace).not.toHaveBeenCalled();
+
+			// 300ms 進める
+			await vi.advanceTimersByTimeAsync(300);
+
+			// 300ms 後に arrangeWorkspace が呼ばれる
+			expect(mockWorkspaceArrange.arrangeWorkspace).toHaveBeenCalledWith(payload);
+		});
+
+		it("should not call arrangeWorkspace when arrange is not true", async () => {
+			const sendResponse = vi.fn();
+			const payload = {
+				issueNumber: 42,
+				issueUrl: "https://github.com/owner/repo/issues/42",
+				prUrl: null,
+				sessionUrl: null,
+			};
+
+			handler({ type: "OPEN_WORKSPACE", payload }, createTrustedSender(), sendResponse);
+
+			await vi.advanceTimersByTimeAsync(500);
+
+			expect(mockWorkspaceLayout.openWorkspace).toHaveBeenCalledWith(payload);
+			expect(mockWorkspaceArrange.arrangeWorkspace).not.toHaveBeenCalled();
+		});
+	});
 });

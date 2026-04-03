@@ -6,14 +6,18 @@ import type {
 
 export class WindowManagerAdapter implements WindowManagerPort {
 	async getScreenWorkArea(): Promise<ScreenBounds> {
-		return new Promise<ScreenBounds>((resolve) => {
+		return new Promise<ScreenBounds>((resolve, reject) => {
 			chrome.system.display.getInfo((displays) => {
-				const primary = displays[0];
+				const workArea = displays[0]?.workArea;
+				if (!workArea) {
+					reject(new Error("No display found"));
+					return;
+				}
 				resolve({
-					left: primary.workArea.left,
-					top: primary.workArea.top,
-					width: primary.workArea.width,
-					height: primary.workArea.height,
+					left: workArea.left,
+					top: workArea.top,
+					width: workArea.width,
+					height: workArea.height,
 				});
 			});
 		});
@@ -57,12 +61,13 @@ export class WindowManagerAdapter implements WindowManagerPort {
 	}
 
 	async moveWindowToBounds(windowId: number, bounds: ScreenBounds): Promise<void> {
+		// Chrome API では state と bounds の同時指定で bounds が無視される場合がある
+		await chrome.windows.update(windowId, { state: "normal" });
 		await chrome.windows.update(windowId, {
 			left: bounds.left,
 			top: bounds.top,
 			width: bounds.width,
 			height: bounds.height,
-			state: "normal",
 		});
 	}
 

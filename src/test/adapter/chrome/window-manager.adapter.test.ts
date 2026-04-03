@@ -25,6 +25,24 @@ describe("WindowManagerAdapter", () => {
 
 			expect(result).toEqual({ left: 0, top: 0, width: 1920, height: 1040 });
 		});
+
+		it("should reject with descriptive error when no displays are returned", async () => {
+			const mock = getChromeMock();
+			mock.system.display.getInfo.mockImplementation((cb: (info: unknown[]) => void) => {
+				cb([]);
+			});
+
+			await expect(adapter.getScreenWorkArea()).rejects.toThrow("No display found");
+		});
+
+		it("should reject with descriptive error when display has no workArea", async () => {
+			const mock = getChromeMock();
+			mock.system.display.getInfo.mockImplementation((cb: (info: unknown[]) => void) => {
+				cb([{}]);
+			});
+
+			await expect(adapter.getScreenWorkArea()).rejects.toThrow("No display found");
+		});
 	});
 
 	describe("findTab", () => {
@@ -113,18 +131,23 @@ describe("WindowManagerAdapter", () => {
 	});
 
 	describe("moveWindowToBounds", () => {
-		it("should call chrome.windows.update with bounds", async () => {
+		it("should call chrome.windows.update twice: first state, then bounds", async () => {
 			const mock = getChromeMock();
 			mock.windows.update.mockResolvedValue({});
 
 			await adapter.moveWindowToBounds(1, { left: 960, top: 0, width: 960, height: 520 });
 
-			expect(mock.windows.update).toHaveBeenCalledWith(1, {
+			expect(mock.windows.update).toHaveBeenCalledTimes(2);
+			// Step 1: state を normal に変更
+			expect(mock.windows.update).toHaveBeenNthCalledWith(1, 1, {
+				state: "normal",
+			});
+			// Step 2: bounds を設定
+			expect(mock.windows.update).toHaveBeenNthCalledWith(2, 1, {
 				left: 960,
 				top: 0,
 				width: 960,
 				height: 520,
-				state: "normal",
 			});
 		});
 	});
