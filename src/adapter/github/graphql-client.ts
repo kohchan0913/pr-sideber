@@ -67,11 +67,6 @@ fragment PrFields on PullRequest {
       number
     }
   }
-  linkedIssues(first: 10) {
-    nodes {
-      number
-    }
-  }
 }`;
 
 const PULL_REQUESTS_QUERY = `
