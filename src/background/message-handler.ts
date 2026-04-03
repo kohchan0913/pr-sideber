@@ -35,8 +35,7 @@ export function createMessageHandler(
 		| "badge"
 		| "tabNavigation"
 		| "claudeSessionWatcher"
-		| "workspaceLayout"
-		| "workspaceArrange"
+		| "workspaceOpen"
 	>,
 ) {
 	return (
@@ -70,8 +69,7 @@ async function handleMessage(
 		| "badge"
 		| "tabNavigation"
 		| "claudeSessionWatcher"
-		| "workspaceLayout"
-		| "workspaceArrange"
+		| "workspaceOpen"
 	>,
 	message: RequestMessage<MessageType>,
 	sendResponse: (response: ResponseMessage<MessageType>) => void,
@@ -217,12 +215,7 @@ async function handleMessage(
 			}
 			case "OPEN_WORKSPACE": {
 				const msg = message as RequestMessage<"OPEN_WORKSPACE">;
-				await services.workspaceLayout.openWorkspace(msg.payload);
-				if (msg.payload.arrange === true) {
-					// タブが完全に開くまで待機してからウィンドウ配置を実行する
-					await new Promise((resolve) => setTimeout(resolve, 300));
-					await services.workspaceArrange.arrangeWorkspace(msg.payload);
-				}
+				await services.workspaceOpen.openWorkspace(msg.payload);
 				sendResponse({ ok: true, data: undefined });
 				break;
 			}

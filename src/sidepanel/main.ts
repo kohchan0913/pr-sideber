@@ -51,12 +51,13 @@ const app = mount(App, {
 		subscribeToMessages,
 		onNavigate: (url: string) => tabNavigationUseCase.navigateToPr(url),
 		onOpenWorkspace: async (resources: WorkspaceResources) => {
+			const currentWindow = await chrome.windows.getCurrent();
 			const response = await chromeSendMessage("OPEN_WORKSPACE", {
 				issueNumber: resources.issueNumber,
 				issueUrl: resources.issueUrl,
 				prUrl: resources.prUrl,
 				sessionUrl: resources.sessionUrl,
-				arrange: true,
+				senderWindowId: currentWindow.id ?? 0,
 			});
 			if (!response.ok) {
 				console.error("Failed to open workspace:", response.error.message);

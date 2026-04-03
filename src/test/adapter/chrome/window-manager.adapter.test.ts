@@ -169,4 +169,42 @@ describe("WindowManagerAdapter", () => {
 			});
 		});
 	});
+
+	describe("activateTab", () => {
+		it("should activate tab and focus its window", async () => {
+			const mock = getChromeMock();
+			mock.tabs.update.mockResolvedValue({ id: 10, windowId: 5 });
+			mock.windows.update.mockResolvedValue({});
+
+			await adapter.activateTab(10);
+
+			expect(mock.tabs.update).toHaveBeenCalledWith(10, { active: true });
+			expect(mock.windows.update).toHaveBeenCalledWith(5, { focused: true });
+		});
+
+		it("should not focus window when tab has no windowId", async () => {
+			const mock = getChromeMock();
+			mock.tabs.update.mockResolvedValue({ id: 10 });
+
+			await adapter.activateTab(10);
+
+			expect(mock.tabs.update).toHaveBeenCalledWith(10, { active: true });
+			expect(mock.windows.update).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("createTabInWindow", () => {
+		it("should create tab in specified window without activating it", async () => {
+			const mock = getChromeMock();
+			mock.tabs.create.mockResolvedValue({ id: 20 });
+
+			await adapter.createTabInWindow("https://github.com/owner/repo/issues/42", 5);
+
+			expect(mock.tabs.create).toHaveBeenCalledWith({
+				url: "https://github.com/owner/repo/issues/42",
+				windowId: 5,
+				active: false,
+			});
+		});
+	});
 });

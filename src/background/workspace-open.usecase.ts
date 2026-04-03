@@ -1,11 +1,18 @@
 import type { ScreenBounds, WindowManagerPort } from "../domain/ports/window-manager.port";
-import type { WorkspaceOpenRequest } from "./workspace-layout.usecase";
 
 /** 配置済み判定の許容誤差 (px) */
 const POSITION_TOLERANCE = 20;
 
-export interface WorkspaceArrangeSettings {
-	readonly getEnabled: () => Promise<boolean>;
+export interface WorkspaceOpenRequest {
+	readonly issueNumber: number;
+	readonly issueUrl: string;
+	readonly prUrl: string | null;
+	readonly sessionUrl: string | null;
+	readonly senderWindowId: number;
+}
+
+export interface WorkspaceOpenSettings {
+	readonly getArrangeEnabled: () => Promise<boolean>;
 }
 
 interface ThreePanelLayout {
@@ -57,8 +64,8 @@ interface ResourceEntry {
 	readonly bounds: ScreenBounds;
 }
 
-/** 単一リソースの配置処理 */
-async function placeResource(
+/** arrange ON: 単一リソースをウィンドウ配置する */
+async function placeResourceArranged(
 	resource: ResourceEntry,
 	windowManager: WindowManagerPort,
 ): Promise<void> {
@@ -83,38 +90,64 @@ async function placeResource(
 	await windowManager.moveWindowToBounds(tabInfo.windowId, resource.bounds);
 }
 
-export function createWorkspaceArrangeUseCase(
+interface SimpleResourceEntry {
+	readonly url: string | null;
+	readonly queryPattern: string;
+}
+
+/** arrange OFF: 既存タブをフォーカスするか、senderWindowId にタブを作成する */
+async function placeResourceSimple(
+	resource: SimpleResourceEntry,
+	senderWindowId: number,
 	windowManager: WindowManagerPort,
-	settings: WorkspaceArrangeSettings,
+): Promise<void> {
+	if (resource.url === null) return;
+
+	const tabInfo = await windowManager.findTab(resource.queryPattern, resource.url);
+
+	if (tabInfo !== null) {
+		await windowManager.activateTab(tabInfo.tabId);
+		return;
+	}
+
+	await windowManager.createTabInWindow(resource.url, senderWindowId);
+}
+
+export function createWorkspaceOpenUseCase(
+	windowManager: WindowManagerPort,
+	settings: WorkspaceOpenSettings,
 ) {
 	return {
-		arrangeWorkspace: async (request: WorkspaceOpenRequest): Promise<void> => {
-			const enabled = await settings.getEnabled();
-			if (!enabled) return;
+		openWorkspace: async (request: WorkspaceOpenRequest): Promise<void> => {
+			const arrangeEnabled = await settings.getArrangeEnabled();
 
-			const workArea = await windowManager.getScreenWorkArea();
-			const layout = calculateThreePanelLayout(workArea);
-
-			const resources: readonly ResourceEntry[] = [
+			const resources = [
 				{
 					url: request.sessionUrl,
 					queryPattern: "*://claude.ai/code/*",
-					bounds: layout.left,
 				},
 				{
 					url: request.issueUrl,
 					queryPattern: "https://github.com/*/*/issues/*",
-					bounds: layout.topRight,
 				},
 				{
 					url: request.prUrl,
 					queryPattern: "https://github.com/*/*/pull/*",
-					bounds: layout.bottomRight,
 				},
-			];
+			] as const;
 
-			for (const resource of resources) {
-				await placeResource(resource, windowManager);
+			if (arrangeEnabled) {
+				const workArea = await windowManager.getScreenWorkArea();
+				const layout = calculateThreePanelLayout(workArea);
+				const boundsMap = [layout.left, layout.topRight, layout.bottomRight] as const;
+
+				for (let i = 0; i < resources.length; i++) {
+					await placeResourceArranged({ ...resources[i], bounds: boundsMap[i] }, windowManager);
+				}
+			} else {
+				for (const resource of resources) {
+					await placeResourceSimple(resource, request.senderWindowId, windowManager);
+				}
 			}
 		},
 	};

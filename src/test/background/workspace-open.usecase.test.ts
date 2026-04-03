@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-	type WorkspaceArrangeSettings,
+	type WorkspaceOpenSettings,
 	calculateThreePanelLayout,
-	createWorkspaceArrangeUseCase,
-} from "../../background/workspace-arrange.usecase";
-import type { WorkspaceOpenRequest } from "../../background/workspace-layout.usecase";
+	createWorkspaceOpenUseCase,
+} from "../../background/workspace-open.usecase";
 import type {
 	ScreenBounds,
 	TabInfo,
@@ -24,11 +23,13 @@ function createMockWindowManager(): {
 		createWindow: vi.fn(),
 		moveWindowToBounds: vi.fn(),
 		moveTabToNewWindow: vi.fn(),
+		activateTab: vi.fn(),
+		createTabInWindow: vi.fn(),
 	};
 }
 
-function createMockSettings(enabled = true): WorkspaceArrangeSettings {
-	return { getEnabled: vi.fn().mockResolvedValue(enabled) };
+function createMockSettings(arrangeEnabled = true): WorkspaceOpenSettings {
+	return { getArrangeEnabled: vi.fn().mockResolvedValue(arrangeEnabled) };
 }
 
 /** 1920x1080 フル HD ワークエリア (タスクバー 40px 下) */
@@ -39,12 +40,13 @@ const FULL_HD_WORK_AREA: ScreenBounds = {
 	height: 1040,
 };
 
-const SAMPLE_REQUEST: WorkspaceOpenRequest = {
+const SAMPLE_REQUEST = {
 	issueNumber: 42,
 	issueUrl: "https://github.com/owner/repo/issues/42",
 	prUrl: "https://github.com/owner/repo/pull/123",
 	sessionUrl: "https://claude.ai/code/session-1",
-};
+	senderWindowId: 100,
+} as const;
 
 // --- calculateThreePanelLayout ---
 
@@ -86,21 +88,21 @@ describe("calculateThreePanelLayout", () => {
 		};
 		const layout = calculateThreePanelLayout(oddWorkArea);
 
-		// 幅 1921 / 2 = 960.5 → Math.round → 961
+		// 幅 1921 / 2 = 960.5 -> Math.round -> 961
 		expect(layout.left.width).toBe(961);
 		expect(layout.topRight.left).toBe(961);
 		expect(layout.topRight.width).toBe(961);
 
-		// 高さ 1041 / 2 = 520.5 → Math.round → 521
+		// 高さ 1041 / 2 = 520.5 -> Math.round -> 521
 		expect(layout.topRight.height).toBe(521);
 		expect(layout.bottomRight.top).toBe(521);
 		expect(layout.bottomRight.height).toBe(521);
 	});
 });
 
-// --- createWorkspaceArrangeUseCase ---
+// --- createWorkspaceOpenUseCase ---
 
-describe("createWorkspaceArrangeUseCase", () => {
+describe("createWorkspaceOpenUseCase", () => {
 	let wm: ReturnType<typeof createMockWindowManager>;
 
 	beforeEach(() => {
@@ -110,6 +112,8 @@ describe("createWorkspaceArrangeUseCase", () => {
 		wm.createWindow.mockResolvedValue(undefined);
 		wm.moveWindowToBounds.mockResolvedValue(undefined);
 		wm.moveTabToNewWindow.mockResolvedValue(undefined);
+		wm.activateTab.mockResolvedValue(undefined);
+		wm.createTabInWindow.mockResolvedValue(undefined);
 		// デフォルト: ウィンドウは遠い位置にある（配置済み判定に引っかからない）
 		wm.getWindowBounds.mockResolvedValue({ left: 9999, top: 9999, width: 100, height: 100 });
 	});
@@ -118,33 +122,30 @@ describe("createWorkspaceArrangeUseCase", () => {
 		resetChromeMock();
 	});
 
-	it("should move 3 single-tab windows to correct positions", async () => {
-		// 各タブが見つかり、それぞれのウィンドウにはタブ1つだけ
-		// findTab 呼び出し順: session → issue → pr
-		wm.findTab
-			.mockResolvedValueOnce({ tabId: 1, windowId: 10, windowTabCount: 1 } satisfies TabInfo) // session
-			.mockResolvedValueOnce({ tabId: 2, windowId: 20, windowTabCount: 1 } satisfies TabInfo) // issue
-			.mockResolvedValueOnce({ tabId: 3, windowId: 30, windowTabCount: 1 } satisfies TabInfo); // pr
+	// --- arrange ON テスト (移植) ---
 
-		const usecase = createWorkspaceArrangeUseCase(wm, createMockSettings());
-		await usecase.arrangeWorkspace(SAMPLE_REQUEST);
+	it("arrange ON: should move 3 single-tab windows to correct positions", async () => {
+		wm.findTab
+			.mockResolvedValueOnce({ tabId: 1, windowId: 10, windowTabCount: 1 } satisfies TabInfo)
+			.mockResolvedValueOnce({ tabId: 2, windowId: 20, windowTabCount: 1 } satisfies TabInfo)
+			.mockResolvedValueOnce({ tabId: 3, windowId: 30, windowTabCount: 1 } satisfies TabInfo);
+
+		const usecase = createWorkspaceOpenUseCase(wm, createMockSettings(true));
+		await usecase.openWorkspace(SAMPLE_REQUEST);
 
 		expect(wm.moveWindowToBounds).toHaveBeenCalledTimes(3);
-		// session (windowId=10) → left bounds
 		expect(wm.moveWindowToBounds).toHaveBeenNthCalledWith(1, 10, {
 			left: 0,
 			top: 0,
 			width: 960,
 			height: 1040,
 		});
-		// issue (windowId=20) → topRight bounds
 		expect(wm.moveWindowToBounds).toHaveBeenNthCalledWith(2, 20, {
 			left: 960,
 			top: 0,
 			width: 960,
 			height: 520,
 		});
-		// pr (windowId=30) → bottomRight bounds
 		expect(wm.moveWindowToBounds).toHaveBeenNthCalledWith(3, 30, {
 			left: 960,
 			top: 520,
@@ -155,28 +156,25 @@ describe("createWorkspaceArrangeUseCase", () => {
 		expect(wm.moveTabToNewWindow).not.toHaveBeenCalled();
 	});
 
-	it("should create new windows when tabs are not found", async () => {
+	it("arrange ON: should create new windows when tabs are not found", async () => {
 		wm.findTab.mockResolvedValue(null);
 
-		const usecase = createWorkspaceArrangeUseCase(wm, createMockSettings());
-		await usecase.arrangeWorkspace(SAMPLE_REQUEST);
+		const usecase = createWorkspaceOpenUseCase(wm, createMockSettings(true));
+		await usecase.openWorkspace(SAMPLE_REQUEST);
 
 		expect(wm.createWindow).toHaveBeenCalledTimes(3);
-		// session → left bounds
 		expect(wm.createWindow).toHaveBeenNthCalledWith(1, "https://claude.ai/code/session-1", {
 			left: 0,
 			top: 0,
 			width: 960,
 			height: 1040,
 		});
-		// issue → topRight bounds
 		expect(wm.createWindow).toHaveBeenNthCalledWith(2, "https://github.com/owner/repo/issues/42", {
 			left: 960,
 			top: 0,
 			width: 960,
 			height: 520,
 		});
-		// pr → bottomRight bounds
 		expect(wm.createWindow).toHaveBeenNthCalledWith(3, "https://github.com/owner/repo/pull/123", {
 			left: 960,
 			top: 520,
@@ -187,33 +185,28 @@ describe("createWorkspaceArrangeUseCase", () => {
 		expect(wm.moveTabToNewWindow).not.toHaveBeenCalled();
 	});
 
-	it("should separate tab to new window when window has multiple tabs", async () => {
-		// タブが見つかるが、ウィンドウに複数タブがある
-		// findTab 呼び出し順: session → issue → pr
+	it("arrange ON: should separate tab to new window when window has multiple tabs", async () => {
 		wm.findTab
-			.mockResolvedValueOnce({ tabId: 1, windowId: 10, windowTabCount: 5 } satisfies TabInfo) // session
-			.mockResolvedValueOnce({ tabId: 2, windowId: 20, windowTabCount: 3 } satisfies TabInfo) // issue
-			.mockResolvedValueOnce({ tabId: 3, windowId: 30, windowTabCount: 2 } satisfies TabInfo); // pr
+			.mockResolvedValueOnce({ tabId: 1, windowId: 10, windowTabCount: 5 } satisfies TabInfo)
+			.mockResolvedValueOnce({ tabId: 2, windowId: 20, windowTabCount: 3 } satisfies TabInfo)
+			.mockResolvedValueOnce({ tabId: 3, windowId: 30, windowTabCount: 2 } satisfies TabInfo);
 
-		const usecase = createWorkspaceArrangeUseCase(wm, createMockSettings());
-		await usecase.arrangeWorkspace(SAMPLE_REQUEST);
+		const usecase = createWorkspaceOpenUseCase(wm, createMockSettings(true));
+		await usecase.openWorkspace(SAMPLE_REQUEST);
 
 		expect(wm.moveTabToNewWindow).toHaveBeenCalledTimes(3);
-		// session (tabId=1) → left bounds
 		expect(wm.moveTabToNewWindow).toHaveBeenNthCalledWith(1, 1, {
 			left: 0,
 			top: 0,
 			width: 960,
 			height: 1040,
 		});
-		// issue (tabId=2) → topRight bounds
 		expect(wm.moveTabToNewWindow).toHaveBeenNthCalledWith(2, 2, {
 			left: 960,
 			top: 0,
 			width: 960,
 			height: 520,
 		});
-		// pr (tabId=3) → bottomRight bounds
 		expect(wm.moveTabToNewWindow).toHaveBeenNthCalledWith(3, 3, {
 			left: 960,
 			top: 520,
@@ -224,19 +217,15 @@ describe("createWorkspaceArrangeUseCase", () => {
 		expect(wm.createWindow).not.toHaveBeenCalled();
 	});
 
-	it("should handle mixed scenarios: move, separate, and create", async () => {
-		// session: 単独タブウィンドウ → moveWindowToBounds
-		// issue: 複数タブウィンドウ → moveTabToNewWindow
-		// pr: タブなし → createWindow
+	it("arrange ON: should handle mixed scenarios (move + separate + create)", async () => {
 		wm.findTab
-			.mockResolvedValueOnce({ tabId: 1, windowId: 10, windowTabCount: 1 } satisfies TabInfo) // session
-			.mockResolvedValueOnce({ tabId: 2, windowId: 20, windowTabCount: 5 } satisfies TabInfo) // issue
-			.mockResolvedValueOnce(null); // pr
+			.mockResolvedValueOnce({ tabId: 1, windowId: 10, windowTabCount: 1 } satisfies TabInfo)
+			.mockResolvedValueOnce({ tabId: 2, windowId: 20, windowTabCount: 5 } satisfies TabInfo)
+			.mockResolvedValueOnce(null);
 
-		const usecase = createWorkspaceArrangeUseCase(wm, createMockSettings());
-		await usecase.arrangeWorkspace(SAMPLE_REQUEST);
+		const usecase = createWorkspaceOpenUseCase(wm, createMockSettings(true));
+		await usecase.openWorkspace(SAMPLE_REQUEST);
 
-		// session (windowId=10) → left bounds via moveWindowToBounds
 		expect(wm.moveWindowToBounds).toHaveBeenCalledTimes(1);
 		expect(wm.moveWindowToBounds).toHaveBeenNthCalledWith(1, 10, {
 			left: 0,
@@ -244,8 +233,6 @@ describe("createWorkspaceArrangeUseCase", () => {
 			width: 960,
 			height: 1040,
 		});
-
-		// issue (tabId=2) → topRight bounds via moveTabToNewWindow
 		expect(wm.moveTabToNewWindow).toHaveBeenCalledTimes(1);
 		expect(wm.moveTabToNewWindow).toHaveBeenNthCalledWith(1, 2, {
 			left: 960,
@@ -253,8 +240,6 @@ describe("createWorkspaceArrangeUseCase", () => {
 			width: 960,
 			height: 520,
 		});
-
-		// pr → bottomRight bounds via createWindow
 		expect(wm.createWindow).toHaveBeenCalledTimes(1);
 		expect(wm.createWindow).toHaveBeenNthCalledWith(1, "https://github.com/owner/repo/pull/123", {
 			left: 960,
@@ -264,63 +249,110 @@ describe("createWorkspaceArrangeUseCase", () => {
 		});
 	});
 
-	it("should skip moving when window is already within tolerance (+-20px)", async () => {
-		// ウィンドウが既に目標位置にある（ScreenBounds の各値が +-20px 以内）
-		// left パネル: 目標 {left:0, top:0, width:960, height:1040}
-		// getScreenWorkArea で返した workArea から計算される位置と一致する場合スキップ
-
-		// findTab で返す windowId のウィンドウが既に正しい位置にあるケースをシミュレート
-		// WindowManagerPort には getCurrentBounds がないので、
-		// moveWindowToBounds が呼ばれない = スキップ、という検証になる
-		// 実装側で何らかの方法でウィンドウの現在位置を知る必要がある
-		// ここでは getScreenWorkArea + findTab の情報で判断すると仮定
-
-		// まずは「moveWindowToBounds が呼ばれないこと」を検証する
-		// 実装が内部でウィンドウ位置を取得して比較するはず
+	it("arrange ON: should skip moving when window is already within tolerance (+-20px)", async () => {
 		wm.findTab
 			.mockResolvedValueOnce({ tabId: 1, windowId: 10, windowTabCount: 1 } satisfies TabInfo)
 			.mockResolvedValueOnce({ tabId: 2, windowId: 20, windowTabCount: 1 } satisfies TabInfo)
 			.mockResolvedValueOnce({ tabId: 3, windowId: 30, windowTabCount: 1 } satisfies TabInfo);
 
-		// getWindowBounds で現在のウィンドウ位置を返す（目標位置と差 10px 以内）
 		wm.getWindowBounds
-			.mockResolvedValueOnce({ left: 5, top: 3, width: 955, height: 1035 }) // left: 差 <20px
-			.mockResolvedValueOnce({ left: 965, top: 5, width: 955, height: 515 }) // topRight: 差 <20px
-			.mockResolvedValueOnce({ left: 965, top: 525, width: 955, height: 515 }); // bottomRight: 差 <20px
+			.mockResolvedValueOnce({ left: 5, top: 3, width: 955, height: 1035 })
+			.mockResolvedValueOnce({ left: 965, top: 5, width: 955, height: 515 })
+			.mockResolvedValueOnce({ left: 965, top: 525, width: 955, height: 515 });
 
-		const usecase = createWorkspaceArrangeUseCase(wm, createMockSettings());
-		await usecase.arrangeWorkspace(SAMPLE_REQUEST);
+		const usecase = createWorkspaceOpenUseCase(wm, createMockSettings(true));
+		await usecase.openWorkspace(SAMPLE_REQUEST);
 
-		// 全ウィンドウが許容範囲内なので移動は発生しない
 		expect(wm.moveWindowToBounds).not.toHaveBeenCalled();
 	});
 
-	it("should skip resources with null URL", async () => {
-		const requestWithNulls: WorkspaceOpenRequest = {
-			issueNumber: 42,
-			issueUrl: "https://github.com/owner/repo/issues/42",
+	it("arrange ON: should skip resources with null URL", async () => {
+		const requestWithNulls = {
+			...SAMPLE_REQUEST,
 			prUrl: null,
 			sessionUrl: null,
 		};
 
 		wm.findTab.mockResolvedValue(null);
 
-		const usecase = createWorkspaceArrangeUseCase(wm, createMockSettings());
-		await usecase.arrangeWorkspace(requestWithNulls);
+		const usecase = createWorkspaceOpenUseCase(wm, createMockSettings(true));
+		await usecase.openWorkspace(requestWithNulls);
 
 		// session と pr は URL が null なのでスキップ。issue のみ処理される
 		expect(wm.findTab).toHaveBeenCalledTimes(1);
 		expect(wm.createWindow).toHaveBeenCalledTimes(1);
 	});
 
-	it("should do nothing when settings are disabled", async () => {
-		const usecase = createWorkspaceArrangeUseCase(wm, createMockSettings(false));
-		await usecase.arrangeWorkspace(SAMPLE_REQUEST);
+	// --- arrange OFF テスト (新規) ---
 
-		expect(wm.getScreenWorkArea).not.toHaveBeenCalled();
-		expect(wm.findTab).not.toHaveBeenCalled();
+	it("arrange OFF: should activateTab for existing tabs", async () => {
+		wm.findTab
+			.mockResolvedValueOnce({ tabId: 1, windowId: 10, windowTabCount: 1 } satisfies TabInfo)
+			.mockResolvedValueOnce({ tabId: 2, windowId: 20, windowTabCount: 3 } satisfies TabInfo)
+			.mockResolvedValueOnce({ tabId: 3, windowId: 30, windowTabCount: 1 } satisfies TabInfo);
+
+		const usecase = createWorkspaceOpenUseCase(wm, createMockSettings(false));
+		await usecase.openWorkspace(SAMPLE_REQUEST);
+
+		expect(wm.activateTab).toHaveBeenCalledTimes(3);
+		expect(wm.activateTab).toHaveBeenNthCalledWith(1, 1);
+		expect(wm.activateTab).toHaveBeenNthCalledWith(2, 2);
+		expect(wm.activateTab).toHaveBeenNthCalledWith(3, 3);
+
+		// ウィンドウ操作は一切しない
 		expect(wm.createWindow).not.toHaveBeenCalled();
 		expect(wm.moveWindowToBounds).not.toHaveBeenCalled();
 		expect(wm.moveTabToNewWindow).not.toHaveBeenCalled();
+		expect(wm.getScreenWorkArea).not.toHaveBeenCalled();
+	});
+
+	it("arrange OFF: should createTabInWindow with senderWindowId for missing tabs", async () => {
+		wm.findTab.mockResolvedValue(null);
+
+		const usecase = createWorkspaceOpenUseCase(wm, createMockSettings(false));
+		await usecase.openWorkspace(SAMPLE_REQUEST);
+
+		expect(wm.createTabInWindow).toHaveBeenCalledTimes(3);
+		expect(wm.createTabInWindow).toHaveBeenNthCalledWith(
+			1,
+			"https://claude.ai/code/session-1",
+			100,
+		);
+		expect(wm.createTabInWindow).toHaveBeenNthCalledWith(
+			2,
+			"https://github.com/owner/repo/issues/42",
+			100,
+		);
+		expect(wm.createTabInWindow).toHaveBeenNthCalledWith(
+			3,
+			"https://github.com/owner/repo/pull/123",
+			100,
+		);
+
+		// ウィンドウ操作は一切しない
+		expect(wm.createWindow).not.toHaveBeenCalled();
+		expect(wm.moveWindowToBounds).not.toHaveBeenCalled();
+		expect(wm.moveTabToNewWindow).not.toHaveBeenCalled();
+		expect(wm.getScreenWorkArea).not.toHaveBeenCalled();
+	});
+
+	it("arrange OFF: should skip resources with null URL", async () => {
+		const requestWithNulls = {
+			...SAMPLE_REQUEST,
+			prUrl: null,
+			sessionUrl: null,
+		};
+
+		wm.findTab.mockResolvedValue(null);
+
+		const usecase = createWorkspaceOpenUseCase(wm, createMockSettings(false));
+		await usecase.openWorkspace(requestWithNulls);
+
+		// session と pr は null なのでスキップ。issue のみ
+		expect(wm.createTabInWindow).toHaveBeenCalledTimes(1);
+		expect(wm.createTabInWindow).toHaveBeenCalledWith(
+			"https://github.com/owner/repo/issues/42",
+			100,
+		);
 	});
 });

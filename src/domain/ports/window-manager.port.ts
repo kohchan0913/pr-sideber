@@ -33,4 +33,10 @@ export interface WindowManagerPort {
 
 	/** タブを新しいウィンドウに分離し、指定位置に配置する */
 	moveTabToNewWindow(tabId: number, bounds: ScreenBounds): Promise<void>;
+
+	/** 既存タブをアクティブにし、そのウィンドウにフォーカスする */
+	activateTab(tabId: number): Promise<void>;
+
+	/** 指定ウィンドウに新しいタブを作成する (バックグラウンドで開く) */
+	createTabInWindow(url: string, windowId: number): Promise<void>;
 }
