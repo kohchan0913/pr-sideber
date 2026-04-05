@@ -735,4 +735,38 @@ describe("createMessageHandler", () => {
 			expect(response).toEqual({ ok: true, data: undefined });
 		});
 	});
+
+	describe("OPEN_WORKSPACE", () => {
+		let mockWorkspaceOpen: { openWorkspace: ReturnType<typeof vi.fn> };
+
+		beforeEach(() => {
+			mockWorkspaceOpen = { openWorkspace: vi.fn().mockResolvedValue(undefined) };
+			services = {
+				auth: mockAuth,
+				workspaceOpen: mockWorkspaceOpen,
+			} as unknown as AppServices;
+			handler = createMessageHandler(services);
+		});
+
+		it("should call workspaceOpen.openWorkspace with payload", async () => {
+			const sendResponse = vi.fn();
+			const payload = {
+				issueNumber: 42,
+				issueUrl: "https://github.com/owner/repo/issues/42",
+				prUrl: "https://github.com/owner/repo/pull/123",
+				sessionUrl: "https://claude.ai/code/session-1",
+				senderWindowId: 100,
+			};
+
+			handler({ type: "OPEN_WORKSPACE", payload }, createTrustedSender(), sendResponse);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockWorkspaceOpen.openWorkspace).toHaveBeenCalledWith(payload);
+			const response = sendResponse.mock.calls[0][0];
+			expect(response).toEqual({ ok: true, data: undefined });
+		});
+	});
 });

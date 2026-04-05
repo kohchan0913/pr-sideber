@@ -35,7 +35,7 @@ export function createMessageHandler(
 		| "badge"
 		| "tabNavigation"
 		| "claudeSessionWatcher"
-		| "workspaceLayout"
+		| "workspaceOpen"
 	>,
 ) {
 	return (
@@ -69,7 +69,7 @@ async function handleMessage(
 		| "badge"
 		| "tabNavigation"
 		| "claudeSessionWatcher"
-		| "workspaceLayout"
+		| "workspaceOpen"
 	>,
 	message: RequestMessage<MessageType>,
 	sendResponse: (response: ResponseMessage<MessageType>) => void,
@@ -215,7 +215,7 @@ async function handleMessage(
 			}
 			case "OPEN_WORKSPACE": {
 				const msg = message as RequestMessage<"OPEN_WORKSPACE">;
-				await services.workspaceLayout.openWorkspace(msg.payload);
+				await services.workspaceOpen.openWorkspace(msg.payload);
 				sendResponse({ ok: true, data: undefined });
 				break;
 			}

@@ -4,6 +4,7 @@ import { ChromeIdentityAdapter } from "../adapter/chrome/identity.adapter";
 import { createOAuthConfig } from "../adapter/chrome/oauth.config";
 import { ChromeStorageAdapter } from "../adapter/chrome/storage.adapter";
 import { TabNavigationAdapter } from "../adapter/chrome/tab-navigation.adapter";
+import { WindowManagerAdapter } from "../adapter/chrome/window-manager.adapter";
 import { GitHubGraphQLClient } from "../adapter/github/graphql-client";
 import { IssueGraphQLClient } from "../adapter/github/issue-graphql-client";
 import { GitHubApiError } from "../shared/types/errors";
@@ -15,7 +16,7 @@ import { WasmPrProcessor } from "../wasm/pr-processor";
 import { ClaudeSessionWatcher } from "./claude-session-watcher";
 import { createMessageHandler } from "./message-handler";
 import type { AppServices } from "./types";
-import { createWorkspaceLayoutUseCase } from "./workspace-layout.usecase";
+import { createWorkspaceOpenUseCase } from "./workspace-open.usecase";
 
 export type { AppServices };
 
@@ -51,26 +52,14 @@ export function initializeApp(): AppServices {
 	const claudeSessionWatcher = new ClaudeSessionWatcher();
 	claudeSessionWatcher.startWatching();
 
-	const workspaceLayout = createWorkspaceLayoutUseCase({
-		findTabByUrl: async (queryPattern: string, matchUrl: string) => {
-			const matchTabs = await chrome.tabs.query({ url: queryPattern });
-			for (const tab of matchTabs) {
-				if (tab.id == null || !tab.url) continue;
-				if (tab.url.startsWith(matchUrl)) return tab.id;
-			}
-			return null;
-		},
-		activateTab: (tabId: number) => tabNavigation.activateTab(tabId),
-		openTabInWindow: async (url: string, windowId: number) => {
-			await chrome.tabs.create({ url, windowId });
-		},
-		findWindowByTabPattern: async (queryPattern: string) => {
-			const matchTabs = await chrome.tabs.query({ url: queryPattern });
-			return matchTabs[0]?.windowId ?? null;
-		},
-		getCurrentWindowId: async () => {
-			const win = await chrome.windows.getCurrent();
-			return win.id ?? 0;
+	const STORAGE_KEY_WORKSPACE_LAYOUT = "workspaceLayoutEnabled";
+	const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
+	const windowManager = new WindowManagerAdapter();
+	const workspaceOpen = createWorkspaceOpenUseCase(windowManager, {
+		getArrangeEnabled: async () => {
+			const value = await storage.get(STORAGE_KEY_WORKSPACE_LAYOUT, isBoolean);
+			// 未設定 (null) 時はデフォルト有効（タブを開いた後に3分割配置する）
+			return value ?? true;
 		},
 	});
 
@@ -84,7 +73,7 @@ export function initializeApp(): AppServices {
 		badge,
 		tabNavigation,
 		claudeSessionWatcher,
-		workspaceLayout,
+		workspaceOpen,
 	});
 	chrome.runtime.onMessage.addListener(handler);
 
@@ -179,7 +168,7 @@ export function initializeApp(): AppServices {
 		badge,
 		tabNavigation,
 		claudeSessionWatcher,
-		workspaceLayout,
+		workspaceOpen,
 		dispose,
 	};
 	return services;

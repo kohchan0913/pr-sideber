@@ -6,14 +6,18 @@ import type {
 
 export class WindowManagerAdapter implements WindowManagerPort {
 	async getScreenWorkArea(): Promise<ScreenBounds> {
-		return new Promise<ScreenBounds>((resolve) => {
+		return new Promise<ScreenBounds>((resolve, reject) => {
 			chrome.system.display.getInfo((displays) => {
-				const primary = displays[0];
+				const workArea = displays[0]?.workArea;
+				if (!workArea) {
+					reject(new Error("No display found"));
+					return;
+				}
 				resolve({
-					left: primary.workArea.left,
-					top: primary.workArea.top,
-					width: primary.workArea.width,
-					height: primary.workArea.height,
+					left: workArea.left,
+					top: workArea.top,
+					width: workArea.width,
+					height: workArea.height,
 				});
 			});
 		});
@@ -35,8 +39,21 @@ export class WindowManagerAdapter implements WindowManagerPort {
 		return null;
 	}
 
-	async createWindow(url: string, bounds: ScreenBounds): Promise<void> {
-		await chrome.windows.create({
+	async getWindowBounds(windowId: number): Promise<ScreenBounds> {
+		const win = await chrome.windows.get(windowId);
+		return {
+			left: win.left ?? 0,
+			top: win.top ?? 0,
+			width: win.width ?? 0,
+			height: win.height ?? 0,
+		};
+	}
+
+	async createWindow(
+		url: string,
+		bounds: ScreenBounds,
+	): Promise<{ windowId: number; tabId: number }> {
+		const win = await chrome.windows.create({
 			url,
 			left: bounds.left,
 			top: bounds.top,
@@ -44,15 +61,17 @@ export class WindowManagerAdapter implements WindowManagerPort {
 			height: bounds.height,
 			focused: false,
 		});
+		return { windowId: win?.id ?? 0, tabId: win?.tabs?.[0]?.id ?? 0 };
 	}
 
 	async moveWindowToBounds(windowId: number, bounds: ScreenBounds): Promise<void> {
+		// Chrome API では state と bounds の同時指定で bounds が無視される場合がある
+		await chrome.windows.update(windowId, { state: "normal" });
 		await chrome.windows.update(windowId, {
 			left: bounds.left,
 			top: bounds.top,
 			width: bounds.width,
 			height: bounds.height,
-			state: "normal",
 		});
 	}
 
@@ -65,5 +84,30 @@ export class WindowManagerAdapter implements WindowManagerPort {
 			height: bounds.height,
 			focused: false,
 		});
+	}
+
+	async navigateTab(tabId: number, url: string): Promise<void> {
+		await chrome.tabs.update(tabId, { url, active: true });
+	}
+
+	async windowExists(windowId: number): Promise<boolean> {
+		try {
+			await chrome.windows.get(windowId);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	async activateTab(tabId: number): Promise<void> {
+		const tab = await chrome.tabs.update(tabId, { active: true });
+		if (tab?.windowId != null) {
+			await chrome.windows.update(tab.windowId, { focused: true });
+		}
+	}
+
+	async createTabInWindow(url: string, windowId: number): Promise<{ tabId: number }> {
+		const tab = await chrome.tabs.create({ url, windowId, active: false });
+		return { tabId: tab.id ?? 0 };
 	}
 }
