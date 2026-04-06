@@ -28,6 +28,18 @@ export function extractIssueNumberFromTitle(title: string): number | null {
 	return null;
 }
 
+/** Content Script から送信されるセッション情報メッセージの型ガード */
+function isContentSessionsMessage(msg: unknown): msg is {
+	type: "CONTENT_CLAUDE_SESSIONS";
+	sessions: ReadonlyArray<{ url: string; title: string }>;
+} {
+	if (typeof msg !== "object" || msg === null) return false;
+	if (!("type" in msg) || (msg as { type: unknown }).type !== "CONTENT_CLAUDE_SESSIONS")
+		return false;
+	if (!("sessions" in msg) || !Array.isArray((msg as { sessions: unknown }).sessions)) return false;
+	return true;
+}
+
 export class ClaudeSessionWatcher {
 	/** タブ監視を開始し、既存の Claude Code Web タブをスキャンする */
 	startWatching(): void {
@@ -39,19 +51,10 @@ export class ClaudeSessionWatcher {
 			(message: unknown, sender: chrome.runtime.MessageSender) => {
 				// 自拡張からのメッセージのみ受け付ける
 				if (sender.id !== chrome.runtime.id) return;
-				if (
-					typeof message !== "object" ||
-					message === null ||
-					!("type" in message) ||
-					(message as { type: string }).type !== "CONTENT_CLAUDE_SESSIONS"
-				) {
-					return;
-				}
-				const msg = message as {
-					type: string;
-					sessions: ReadonlyArray<{ readonly url: string; readonly title: string }>;
-				};
-				this.handleContentScriptSessions(msg.sessions).catch((err: unknown) => {
+				// Content Script は claude.ai/code/ 上でのみ動作するため、sender.url で起源を検証する
+				if (!sender.url?.startsWith("https://claude.ai/code/")) return;
+				if (!isContentSessionsMessage(message)) return;
+				this.handleContentScriptSessions(message.sessions).catch((err: unknown) => {
 					console.error("[DEBUG:watcher] handleContentScriptSessions failed:", err);
 				});
 			},
@@ -66,12 +69,16 @@ export class ClaudeSessionWatcher {
 	/** 既存の Claude Code Web タブをスキャンしてセッションを保存する */
 	private async scanExistingTabs(): Promise<void> {
 		const tabs = await chrome.tabs.query({ url: "*://claude.ai/code/*" });
-		console.log(`[DEBUG:watcher] scanExistingTabs: ${tabs.length} tabs found`);
+		if (import.meta.env.DEV) {
+			console.log(`[DEBUG:watcher] scanExistingTabs: ${tabs.length} tabs found`);
+		}
 		for (const tab of tabs) {
 			if (!tab.url?.includes(CLAUDE_CODE_URL_PATTERN)) continue;
 			const title = tab.title ?? "";
 			const issueNumber = extractIssueNumberFromTitle(title);
-			console.log(`[DEBUG:watcher] tab="${title}" url=${tab.url} → issueNumber=${issueNumber}`);
+			if (import.meta.env.DEV) {
+				console.log(`[DEBUG:watcher] tab="${title}" url=${tab.url} → issueNumber=${issueNumber}`);
+			}
 			if (issueNumber === null) continue;
 
 			const session: ClaudeSession = {
@@ -95,7 +102,9 @@ export class ClaudeSessionWatcher {
 
 		const title = tab.title ?? "";
 		const issueNumber = extractIssueNumberFromTitle(title);
-		console.log(`[DEBUG:watcher] onTabUpdated: title="${title}" → issueNumber=${issueNumber}`);
+		if (import.meta.env.DEV) {
+			console.log(`[DEBUG:watcher] onTabUpdated: title="${title}" → issueNumber=${issueNumber}`);
+		}
 		if (issueNumber === null) return;
 
 		const session: ClaudeSession = {
@@ -134,9 +143,11 @@ export class ClaudeSessionWatcher {
 			}
 		}
 
-		console.log(
-			`[DEBUG:watcher] cleanupClosedIssues: openNumbers=${openIssueNumbers.size}, kept=${Object.keys(updated).length}, deleted=[${deleted.join(",")}]`,
-		);
+		if (import.meta.env.DEV) {
+			console.log(
+				`[DEBUG:watcher] cleanupClosedIssues: openNumbers=${openIssueNumbers.size}, kept=${Object.keys(updated).length}, deleted=[${deleted.join(",")}]`,
+			);
+		}
 		await chrome.storage.local.set({ [STORAGE_KEY]: updated });
 	}
 

@@ -280,7 +280,7 @@ describe("ClaudeSessionWatcher", () => {
 						},
 					],
 				},
-				{ id: "test-extension-id" }, // sender.id === chrome.runtime.id
+				{ id: "test-extension-id", url: "https://claude.ai/code/session_abc" },
 			);
 
 			// handleContentScriptSessions が非同期で実行されるため待機
@@ -291,6 +291,50 @@ describe("ClaudeSessionWatcher", () => {
 			const setCall = chromeMock.storage.local.set.mock.calls[0][0];
 			expect(setCall.claudeSessions["999"]).toBeDefined();
 			expect(setCall.claudeSessions["999"][0].issueNumber).toBe(999);
+		});
+
+		it("sender.url が https://claude.ai/code/ で始まらないメッセージは無視される", async () => {
+			watcher.startWatching();
+
+			const onMessageCallback = chromeMock.runtime.onMessage.addListener.mock.calls[0][0];
+
+			onMessageCallback(
+				{
+					type: "CONTENT_CLAUDE_SESSIONS",
+					sessions: [
+						{
+							url: "https://claude.ai/code/session_abc",
+							title: "Investigate issue 888",
+						},
+					],
+				},
+				{ id: "test-extension-id", url: "https://malicious-site.com/fake" },
+			);
+
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			expect(chromeMock.storage.local.set).not.toHaveBeenCalled();
+		});
+
+		it("sender.url が undefined のメッセージは無視される", async () => {
+			watcher.startWatching();
+
+			const onMessageCallback = chromeMock.runtime.onMessage.addListener.mock.calls[0][0];
+
+			onMessageCallback(
+				{
+					type: "CONTENT_CLAUDE_SESSIONS",
+					sessions: [
+						{
+							url: "https://claude.ai/code/session_xyz",
+							title: "Investigate issue 777",
+						},
+					],
+				},
+				{ id: "test-extension-id" }, // url なし
+			);
+
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			expect(chromeMock.storage.local.set).not.toHaveBeenCalled();
 		});
 
 		it("sender.id が自拡張と異なるメッセージは無視される", async () => {
@@ -308,7 +352,7 @@ describe("ClaudeSessionWatcher", () => {
 						},
 					],
 				},
-				{ id: "malicious-extension-id" }, // 異なる sender.id
+				{ id: "malicious-extension-id", url: "https://claude.ai/code/session_xyz" },
 			);
 
 			// 少し待って storage.local.set が呼ばれていないことを確認
@@ -321,7 +365,10 @@ describe("ClaudeSessionWatcher", () => {
 
 			const onMessageCallback = chromeMock.runtime.onMessage.addListener.mock.calls[0][0];
 
-			onMessageCallback({ type: "SOME_OTHER_MESSAGE", data: {} }, { id: "test-extension-id" });
+			onMessageCallback(
+				{ type: "SOME_OTHER_MESSAGE", data: {} },
+				{ id: "test-extension-id", url: "https://claude.ai/code/session_abc" },
+			);
 
 			await new Promise((resolve) => setTimeout(resolve, 50));
 			expect(chromeMock.storage.local.set).not.toHaveBeenCalled();
