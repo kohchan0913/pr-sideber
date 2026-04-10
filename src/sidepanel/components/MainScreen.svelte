@@ -18,6 +18,8 @@
 	import EpicTabBar from "./EpicTabBar.svelte";
 	import LogoutButton from "./LogoutButton.svelte";
 	import RelativeTime from "./RelativeTime.svelte";
+	import type { DebugState } from "../../shared/types/messages";
+	import DebugPanel from "./DebugPanel.svelte";
 	import PrSection from "./PrSection.svelte";
 
 	type Props = {
@@ -32,9 +34,12 @@
 		onNavigate?: (url: string) => void;
 		onOpenWorkspace?: (resources: WorkspaceResources) => void;
 		getCurrentTabUrl?: () => Promise<string | null>;
+		getDebugState?: () => Promise<DebugState>;
 	};
 
-	const { onLogout, fetchPrs, fetchEpicTree, getClaudeSessions, getCachedPrs, loadPrsWithCache, subscribeToMessages, pinnedTabsStore, onNavigate, onOpenWorkspace, getCurrentTabUrl }: Props = $props();
+	const { onLogout, fetchPrs, fetchEpicTree, getClaudeSessions, getCachedPrs, loadPrsWithCache, subscribeToMessages, pinnedTabsStore, onNavigate, onOpenWorkspace, getCurrentTabUrl, getDebugState }: Props = $props();
+
+	let showDebugPanel = $state(false);
 
 	function handlePin(tab: { type: "epic" | "issue"; number: number; title: string }): void {
 		void pinnedTabsStore.pin(tab);
@@ -236,6 +241,18 @@
 			{#if lastUpdatedAt}
 				<span class="last-updated"><RelativeTime dateStr={lastUpdatedAt} /></span>
 			{/if}
+			{#if getDebugState}
+				<button
+					class="debug-toggle"
+					class:active={showDebugPanel}
+					onclick={() => { showDebugPanel = !showDebugPanel; }}
+					aria-label="Toggle debug panel"
+				>
+					<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+						<path d="M4.978.855a.5.5 0 1 0-.956.29l.41 1.352A4.985 4.985 0 0 0 3 6h10a4.985 4.985 0 0 0-1.432-3.503l.41-1.352a.5.5 0 1 0-.956-.29l-.291.956A4.978 4.978 0 0 0 8 1a4.979 4.979 0 0 0-2.731.811l-.29-.956zM13 6v1H8.5V3.556a4.024 4.024 0 0 1 2.231.811l.291-.956zM6 .278l.291.956A4.028 4.028 0 0 0 4.018 3.5L3 6v1h4.5V3.556A4.094 4.094 0 0 1 6 .278zM1 8.5A.5.5 0 0 1 1.5 8H6v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5H1.5a.5.5 0 0 1-.5-.5zm9.5-.5H15a.5.5 0 0 1 0 1h-1.5V12a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V8.5z"/>
+					</svg>
+				</button>
+			{/if}
 			<LogoutButton {onLogout} />
 		</div>
 	</header>
@@ -259,6 +276,10 @@
 		<EpicTabBar store={pinnedTabsStore} />
 		<EpicSection tree={displayedTree} onPin={handlePin} {onNavigate} onOpenWorkspace={handleOpenWorkspace} {activeTabUrl} {activeWorkspaceIssueNumber} />
 		<PrSection title="Review Requests" items={data.reviewRequests.items} {onNavigate} {activeTabUrl} />
+	{/if}
+
+	{#if showDebugPanel && getDebugState}
+		<DebugPanel {getDebugState} />
 	{/if}
 </main>
 
@@ -383,5 +404,30 @@
 
 	.retry-button:active {
 		opacity: 0.7;
+	}
+
+	.debug-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		background: none;
+		border: 1px solid transparent;
+		border-radius: 3px;
+		cursor: pointer;
+		color: var(--color-text-secondary);
+		transition: color 0.15s, border-color 0.15s;
+	}
+
+	.debug-toggle:hover {
+		color: var(--color-accent-primary);
+		border-color: var(--color-border-primary);
+	}
+
+	.debug-toggle.active {
+		color: var(--color-accent-primary);
+		border-color: var(--color-accent-primary);
 	}
 </style>

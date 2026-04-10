@@ -14,6 +14,7 @@ import { WasmEpicProcessor } from "../wasm/epic-processor";
 import { WasmIssueProcessor } from "../wasm/issue-processor";
 import { WasmPrProcessor } from "../wasm/pr-processor";
 import { ClaudeSessionWatcher } from "./claude-session-watcher";
+import { createExternalMessageHandler } from "./external-message-handler";
 import { createMessageHandler } from "./message-handler";
 import type { AppServices } from "./types";
 import { createWorkspaceOpenUseCase } from "./workspace-open.usecase";
@@ -76,6 +77,10 @@ export function initializeApp(): AppServices {
 		workspaceOpen,
 	});
 	chrome.runtime.onMessage.addListener(handler);
+
+	// claude.ai からの外部メッセージを受け付ける (externally_connectable)
+	const externalHandler = createExternalMessageHandler(claudeSessionWatcher);
+	chrome.runtime.onMessageExternal.addListener(externalHandler);
 
 	// タブ変更リスナー: アクティブタブの URL 変更を Side Panel に通知
 	async function onTabActivated(activeInfo: { tabId: number; windowId: number }): Promise<void> {

@@ -7,6 +7,8 @@
  * fiber の memoizedProps.session から直接読み取る方式を採用している。
  */
 
+import { logDebug } from "../shared/utils/debug-logger";
+
 const SESSION_CONTAINER_SELECTOR = "div.cursor-pointer";
 const FIBER_KEY_PREFIX = "__reactFiber$";
 const MAX_FIBER_DEPTH = 10;
@@ -65,6 +67,8 @@ function extractSessionFromFiber(element: Element): SessionLink | null {
 	} catch (e) {
 		// fiber プロパティへのアクセスが Proxy 等で例外を投げる可能性がある
 		console.error("[claude-session-scraper] fiber extraction failed:", e);
+		// Content Script では chrome.storage が利用不可な場合があるため fire-and-forget
+		logDebug("error", "scraper", "fiber extraction failed", String(e)).catch(() => {});
 	}
 	return null;
 }
@@ -94,6 +98,12 @@ export function scrapeSessionLinks(doc: Document): readonly SessionLink[] {
 		console.warn(
 			"[claude-session-scraper] 0 sessions found on claude.ai/code. Selector or fiber structure may have changed.",
 		);
+		// Content Script では chrome.storage が利用不可な場合があるため fire-and-forget
+		logDebug(
+			"warn",
+			"scraper",
+			"0 sessions found — selector or fiber structure may have changed",
+		).catch(() => {});
 	}
 
 	return results;
@@ -112,6 +122,8 @@ function sendSessionsToBackground(): void {
 	// fire-and-forget: Background 側で受信処理する
 	chrome.runtime.sendMessage(message).catch((err: unknown) => {
 		console.error("[claude-session-scraper] sendMessage failed:", err);
+		// Content Script では chrome.storage が利用不可な場合があるため fire-and-forget
+		logDebug("error", "scraper", "sendMessage failed", String(err)).catch(() => {});
 	});
 }
 

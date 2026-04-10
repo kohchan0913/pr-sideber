@@ -5,6 +5,7 @@ import { ChromeStorageAdapter } from "../adapter/chrome/storage.adapter";
 import { TabNavigationAdapter } from "../adapter/chrome/tab-navigation.adapter";
 import type { EpicTreeDto } from "../domain/ports/epic-processor.port";
 import type { ClaudeSessionStorage } from "../shared/types/claude-session";
+import type { DebugState } from "../shared/types/messages";
 import { createAuthUseCase } from "../shared/usecase/auth.usecase";
 import { createDeviceFlowController } from "../shared/usecase/device-flow.controller";
 import { createPrUseCase } from "../shared/usecase/pr.usecase";
@@ -53,6 +54,14 @@ async function getClaudeSessions(): Promise<ClaudeSessionStorage> {
 	return response.data;
 }
 
+async function getDebugState(): Promise<DebugState> {
+	const response = await chromeSendMessage("GET_DEBUG_STATE");
+	if (!response.ok) {
+		throw new Error(response.error.message);
+	}
+	return response.data;
+}
+
 const app = mount(App, {
 	target,
 	props: {
@@ -78,6 +87,7 @@ const app = mount(App, {
 			}
 		},
 		getCurrentTabUrl: () => tabNavigationAdapter.getCurrentTabUrl(),
+		getDebugState,
 	},
 });
 

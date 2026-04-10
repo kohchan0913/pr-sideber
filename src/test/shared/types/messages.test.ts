@@ -14,8 +14,9 @@ describe("messages", () => {
 			expect(MESSAGE_TYPES).toContain("NAVIGATE_TO_PR");
 			expect(MESSAGE_TYPES).toContain("FETCH_EPIC_TREE");
 			expect(MESSAGE_TYPES).toContain("GET_CLAUDE_SESSIONS");
+			expect(MESSAGE_TYPES).toContain("GET_DEBUG_STATE");
 			expect(MESSAGE_TYPES).toContain("OPEN_WORKSPACE");
-			expect(MESSAGE_TYPES).toHaveLength(11);
+			expect(MESSAGE_TYPES).toHaveLength(12);
 		});
 	});
 

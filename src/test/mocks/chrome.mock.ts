@@ -23,6 +23,10 @@ type ChromeMock = {
 			addListener: ReturnType<typeof vi.fn>;
 			removeListener: ReturnType<typeof vi.fn>;
 		};
+		onMessageExternal: {
+			addListener: ReturnType<typeof vi.fn>;
+			removeListener: ReturnType<typeof vi.fn>;
+		};
 		onSuspend: {
 			addListener: ReturnType<typeof vi.fn>;
 			removeListener: ReturnType<typeof vi.fn>;
@@ -96,6 +100,10 @@ function createChromeMock(): ChromeMock {
 			id: "test-extension-id",
 			sendMessage: vi.fn(),
 			onMessage: {
+				addListener: vi.fn(),
+				removeListener: vi.fn(),
+			},
+			onMessageExternal: {
 				addListener: vi.fn(),
 				removeListener: vi.fn(),
 			},

@@ -23,6 +23,9 @@ export default defineManifest({
 			run_at: "document_idle",
 		},
 	],
+	externally_connectable: {
+		matches: ["https://claude.ai/*"],
+	},
 	action: {
 		default_icon: {
 			"16": "icons/icon-16.png",
