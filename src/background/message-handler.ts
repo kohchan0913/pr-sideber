@@ -1,5 +1,11 @@
-import type { MessageType, RequestMessage, ResponseMessage } from "../shared/types/messages";
+import type {
+	DebugState,
+	MessageType,
+	RequestMessage,
+	ResponseMessage,
+} from "../shared/types/messages";
 import { isRequestMessage } from "../shared/types/messages";
+import { getDebugEntries } from "../shared/utils/debug-logger";
 import { extractPrBaseUrl, isPrSubPage } from "../shared/utils/github-url";
 import type { ClaudeSessionWatcher } from "./claude-session-watcher";
 import type { AppServices } from "./types";
@@ -16,6 +22,7 @@ const ERROR_MESSAGES: Record<MessageType, string> = {
 	UPDATE_BADGE: "Failed to update badge",
 	NAVIGATE_TO_PR: "Navigation failed",
 	GET_CLAUDE_SESSIONS: "Failed to get Claude sessions",
+	GET_DEBUG_STATE: "Failed to get debug state",
 	OPEN_WORKSPACE: "Failed to open workspace",
 };
 
@@ -216,6 +223,18 @@ async function handleMessage(
 			case "GET_CLAUDE_SESSIONS": {
 				const sessions = await services.claudeSessionWatcher.getSessions();
 				sendResponse({ ok: true, data: sessions });
+				break;
+			}
+			case "GET_DEBUG_STATE": {
+				const claudeSessions = await services.claudeSessionWatcher.getSessions();
+				const logs = await getDebugEntries();
+				const tabs = await chrome.tabs.query({ url: "*://claude.ai/code/*" });
+				const debugState: DebugState = {
+					claudeSessions,
+					watcherTabCount: tabs.length,
+					logs,
+				};
+				sendResponse({ ok: true, data: debugState });
 				break;
 			}
 			case "OPEN_WORKSPACE": {

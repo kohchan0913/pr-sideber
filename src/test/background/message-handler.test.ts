@@ -875,4 +875,79 @@ describe("createMessageHandler", () => {
 			expect(response).toEqual({ ok: true, data: undefined });
 		});
 	});
+
+	describe("GET_DEBUG_STATE", () => {
+		let mockClaudeSessionWatcher: {
+			getSessions: ReturnType<typeof vi.fn>;
+		};
+		/** chrome.storage.local のインメモリストア */
+		let storageData: Record<string, unknown>;
+
+		beforeEach(() => {
+			const chromeMock = getChromeMock();
+			storageData = {};
+			chromeMock.storage.local.get.mockImplementation(async (key: string) => {
+				return { [key]: storageData[key] };
+			});
+			chromeMock.tabs.query.mockResolvedValue([
+				{ url: "https://claude.ai/code/session_1" },
+				{ url: "https://claude.ai/code/session_2" },
+			]);
+
+			mockClaudeSessionWatcher = {
+				getSessions: vi.fn().mockResolvedValue({
+					"42": [
+						{
+							sessionUrl: "https://claude.ai/code/session_1",
+							title: "Inv #42 debug",
+							issueNumber: 42,
+							detectedAt: "2026-04-08T00:00:00Z",
+							isLive: true,
+						},
+					],
+				}),
+			};
+			services = {
+				auth: mockAuth,
+				claudeSessionWatcher: mockClaudeSessionWatcher,
+			} as unknown as AppServices;
+			handler = createMessageHandler(services);
+		});
+
+		it("GET_DEBUG_STATE: DebugState を返す", async () => {
+			const sendResponse = vi.fn();
+
+			handler({ type: "GET_DEBUG_STATE" }, createTrustedSender(), sendResponse);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			const response = sendResponse.mock.calls[0][0];
+			expect(response.ok).toBe(true);
+			if (response.ok) {
+				expect(response.data.watcherTabCount).toBe(2);
+				expect(response.data.claudeSessions).toHaveProperty("42");
+				expect(Array.isArray(response.data.logs)).toBe(true);
+			}
+		});
+
+		it("GET_DEBUG_STATE: 内部エラー時にエラーレスポンスを返す", async () => {
+			mockClaudeSessionWatcher.getSessions.mockRejectedValue(new Error("Storage read failed"));
+			const sendResponse = vi.fn();
+
+			handler({ type: "GET_DEBUG_STATE" }, createTrustedSender(), sendResponse);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			const response = sendResponse.mock.calls[0][0];
+			expect(response.ok).toBe(false);
+			if (!response.ok) {
+				expect(response.error.code).toBe("GET_DEBUG_STATE_ERROR");
+				expect(response.error.message).toContain("Failed to get debug state");
+			}
+		});
+	});
 });

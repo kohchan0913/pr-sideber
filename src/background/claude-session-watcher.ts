@@ -1,4 +1,5 @@
 import type { ClaudeSession, ClaudeSessionStorage } from "../shared/types/claude-session";
+import { logDebug } from "../shared/utils/debug-logger";
 
 const CLAUDE_CODE_URL_PATTERN = "claude.ai/code/";
 const STORAGE_KEY = "claudeSessions";
@@ -56,13 +57,19 @@ export class ClaudeSessionWatcher {
 				if (!isContentSessionsMessage(message)) return;
 				this.handleContentScriptSessions(message.sessions).catch((err: unknown) => {
 					console.error("[DEBUG:watcher] handleContentScriptSessions failed:", err);
+					// ログ書き込み自体が失敗してもメイン処理に影響させない
+					logDebug("error", "watcher", "handleContentScriptSessions failed", String(err)).catch(
+						() => {},
+					);
 				});
 			},
 		);
 
 		// 起動時に既に開いている Claude Code Web タブを検出
-		this.scanExistingTabs().catch(() => {
+		this.scanExistingTabs().catch((err: unknown) => {
 			// スキャン失敗は非致命的（次の onUpdated で拾える）
+			// ログ書き込み自体が失敗してもメイン処理に影響させない
+			logDebug("warn", "watcher", "scanExistingTabs failed", String(err)).catch(() => {});
 		});
 	}
 

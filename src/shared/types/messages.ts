@@ -2,7 +2,14 @@ import type { EpicTreeDto } from "../../domain/ports/epic-processor.port";
 import type { IssueListDto } from "../../domain/ports/issue-processor.port";
 import type { ProcessedPrsResult } from "../../domain/ports/pr-processor.port";
 import type { DeviceCodeResponse, PollResult } from "../../domain/types/auth";
+import type { DebugLogEntry } from "../utils/debug-logger";
 import type { ClaudeSessionStorage } from "./claude-session";
+
+export interface DebugState {
+	readonly claudeSessions: ClaudeSessionStorage;
+	readonly watcherTabCount: number;
+	readonly logs: readonly DebugLogEntry[];
+}
 
 export const MESSAGE_TYPES = [
 	"AUTH_LOGOUT",
@@ -15,6 +22,7 @@ export const MESSAGE_TYPES = [
 	"UPDATE_BADGE",
 	"NAVIGATE_TO_PR",
 	"GET_CLAUDE_SESSIONS",
+	"GET_DEBUG_STATE",
 	"OPEN_WORKSPACE",
 ] as const;
 
@@ -32,6 +40,7 @@ export type RequestMap = {
 	UPDATE_BADGE: { reviewRequestCount: number };
 	NAVIGATE_TO_PR: { url: string };
 	GET_CLAUDE_SESSIONS: undefined;
+	GET_DEBUG_STATE: undefined;
 	OPEN_WORKSPACE: {
 		issueNumber: number;
 		issueUrl: string;
@@ -53,6 +62,7 @@ export type ResponseDataMap = {
 	UPDATE_BADGE: undefined;
 	NAVIGATE_TO_PR: undefined;
 	GET_CLAUDE_SESSIONS: ClaudeSessionStorage;
+	GET_DEBUG_STATE: DebugState;
 	OPEN_WORKSPACE: undefined;
 };
 
