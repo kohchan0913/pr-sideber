@@ -336,6 +336,96 @@ describe("mergeSessionsIntoTree", () => {
 		expect(issueNode.children).toHaveLength(2);
 	});
 
+	// Issue #34: 同一 sessionUrl が複数 Issue にまたがる場合の防御的重複排除
+	it("同一 sessionUrl が複数 Issue に存在する場合、最新の detectedAt のみ残る", () => {
+		const tree: EpicTreeDto = {
+			roots: [makeEpicNode(1, [makeIssueNode(10), makeIssueNode(20)])],
+		};
+		const sessions: ClaudeSessionStorage = {
+			"10": [
+				{
+					sessionUrl: "https://claude.ai/code/session_CROSS",
+					title: "Inv #10 old title",
+					issueNumber: 10,
+					detectedAt: "2026-04-01T00:00:00Z",
+					isLive: false,
+				},
+			],
+			"20": [
+				{
+					sessionUrl: "https://claude.ai/code/session_CROSS",
+					title: "Investigate issue 20",
+					issueNumber: 20,
+					detectedAt: "2026-04-05T00:00:00Z",
+					isLive: true,
+				},
+			],
+		};
+
+		const result = mergeSessionsIntoTree(tree, sessions);
+
+		const issue10 = result.roots[0].children[0];
+		const issue20 = result.roots[0].children[1];
+		// Issue #10 からは除去、Issue #20 にのみ残る
+		expect(issue10.children).toHaveLength(0);
+		expect(issue20.children).toHaveLength(1);
+		if (issue20.children[0].kind.type === "session") {
+			expect(issue20.children[0].kind.url).toBe("https://claude.ai/code/session_CROSS");
+		}
+	});
+
+	it("cross-issue 重複排除で、重複していない URL は影響を受けない", () => {
+		const tree: EpicTreeDto = {
+			roots: [makeEpicNode(1, [makeIssueNode(10), makeIssueNode(20)])],
+		};
+		const sessions: ClaudeSessionStorage = {
+			"10": [
+				{
+					sessionUrl: "https://claude.ai/code/session_CROSS",
+					title: "Inv #10",
+					issueNumber: 10,
+					detectedAt: "2026-04-01T00:00:00Z",
+					isLive: false,
+				},
+				{
+					sessionUrl: "https://claude.ai/code/session_UNIQUE_A",
+					title: "Inv #10 other",
+					issueNumber: 10,
+					detectedAt: "2026-04-02T00:00:00Z",
+					isLive: false,
+				},
+			],
+			"20": [
+				{
+					sessionUrl: "https://claude.ai/code/session_CROSS",
+					title: "Investigate issue 20",
+					issueNumber: 20,
+					detectedAt: "2026-04-05T00:00:00Z",
+					isLive: true,
+				},
+				{
+					sessionUrl: "https://claude.ai/code/session_UNIQUE_B",
+					title: "Investigate issue 20 v2",
+					issueNumber: 20,
+					detectedAt: "2026-04-06T00:00:00Z",
+					isLive: true,
+				},
+			],
+		};
+
+		const result = mergeSessionsIntoTree(tree, sessions);
+
+		const issue10 = result.roots[0].children[0];
+		const issue20 = result.roots[0].children[1];
+		// Issue #10: CROSS は除去、UNIQUE_A は残る
+		expect(issue10.children).toHaveLength(1);
+		if (issue10.children[0].kind.type === "session") {
+			expect(issue10.children[0].kind.url).toBe("https://claude.ai/code/session_UNIQUE_A");
+		}
+		// Issue #20: CROSS と UNIQUE_B の両方残る
+		expect(issue20.children).toHaveLength(2);
+	});
+
 	it("returns tree with empty roots unchanged", () => {
 		const tree: EpicTreeDto = { roots: [] };
 		const sessions: ClaudeSessionStorage = {

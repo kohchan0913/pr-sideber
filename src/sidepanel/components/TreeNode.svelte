@@ -179,7 +179,7 @@
 
 	{#if open && hasChildren}
 		<div class="children">
-			{#each node.children as child (child.kind.type === "epic" ? `epic-${child.kind.number}` : child.kind.type === "issue" ? `issue-${child.kind.number}` : child.kind.type === "pullRequest" ? `pr-${child.kind.number}` : `session-${child.kind.url}`)}
+			{#each node.children as child (child.kind.type === "epic" ? `epic-${child.kind.number}` : child.kind.type === "issue" ? `issue-${child.kind.number}` : child.kind.type === "pullRequest" ? `pr-${child.kind.number}` : `session-${child.kind.issueNumber}-${child.kind.url}`)}
 				<TreeNode node={child} {activeTabUrl} {activeWorkspaceIssueNumber} parentIsActiveWorkspace={isWorkspaceActive} {onNavigate} {onOpenWorkspace} {onPin} />
 			{/each}
 		</div>

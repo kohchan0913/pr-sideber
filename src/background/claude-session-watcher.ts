@@ -5,6 +5,26 @@ const CLAUDE_CODE_URL_PATTERN = "claude.ai/code/";
 const STORAGE_KEY = "claudeSessions";
 
 /**
+ * 同一 sessionUrl が別の Issue key に既存の場合、その key から削除する。
+ * セッションタイトル変更で Issue 番号が変わるケースへの対応 (Issue #34)。
+ */
+function removeDuplicateUrlFromOtherKeys(
+	storage: Record<string, readonly ClaudeSession[]>,
+	sessionUrl: string,
+	currentKey: string,
+): Record<string, readonly ClaudeSession[]> {
+	let result = storage;
+	for (const [key, sessions] of Object.entries(result)) {
+		if (key === currentKey) continue;
+		const filtered = sessions.filter((s) => s.sessionUrl !== sessionUrl);
+		if (filtered.length !== sessions.length) {
+			result = { ...result, [key]: filtered };
+		}
+	}
+	return result;
+}
+
+/**
  * Claude Code Web のセッションタイトルから Issue 番号を抽出する。
  *
  * パターン:
@@ -198,6 +218,8 @@ export class ClaudeSessionWatcher {
 
 		for (const session of validSessions) {
 			const key = String(session.issueNumber);
+			// セッションタイトル変更で Issue 番号が変わった場合、旧 key から同一 URL を削除する
+			merged = removeDuplicateUrlFromOtherKeys(merged, session.sessionUrl, key);
 			const existing = merged[key] ?? [];
 			const idx = existing.findIndex((s) => s.sessionUrl === session.sessionUrl);
 			const updatedSessions =
@@ -212,7 +234,9 @@ export class ClaudeSessionWatcher {
 	private async saveSession(session: ClaudeSession): Promise<void> {
 		const storage = await this.getSessions();
 		const key = String(session.issueNumber);
-		const existing = storage[key] ?? [];
+		// セッションタイトル変更で Issue 番号が変わった場合、旧 key から同一 URL を削除する
+		const cleaned = removeDuplicateUrlFromOtherKeys(storage, session.sessionUrl, key);
+		const existing = cleaned[key] ?? [];
 
 		// 同じ URL のセッションは更新、なければ追加
 		const idx = existing.findIndex((s) => s.sessionUrl === session.sessionUrl);
@@ -220,7 +244,7 @@ export class ClaudeSessionWatcher {
 			idx >= 0 ? existing.map((s, i) => (i === idx ? session : s)) : [...existing, session];
 
 		await chrome.storage.local.set({
-			[STORAGE_KEY]: { ...storage, [key]: updatedSessions },
+			[STORAGE_KEY]: { ...cleaned, [key]: updatedSessions },
 		});
 		if (import.meta.env.DEV) {
 			console.log(

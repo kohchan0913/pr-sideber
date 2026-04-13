@@ -17,6 +17,33 @@ function deduplicateSessionsByTitle(sessions: readonly ClaudeSession[]): readonl
 }
 
 /**
+ * 同一 sessionUrl が複数 Issue にまたがる場合、最新の detectedAt を持つ方のみ残す。
+ * Storage 層で防ぐのが本筋だが、既存データへの防御として merge 時にも除去する (Issue #34)。
+ */
+function deduplicateSessionsAcrossIssues(sessions: ClaudeSessionStorage): ClaudeSessionStorage {
+	// URL → { key, detectedAt } の最新エントリを収集
+	const latestByUrl = new Map<string, { key: string; detectedAt: string }>();
+	for (const [key, list] of Object.entries(sessions)) {
+		for (const s of list) {
+			const existing = latestByUrl.get(s.sessionUrl);
+			if (!existing || s.detectedAt > existing.detectedAt) {
+				latestByUrl.set(s.sessionUrl, { key, detectedAt: s.detectedAt });
+			}
+		}
+	}
+
+	// 最新でない key からは該当 URL を除去
+	const result: Record<string, readonly ClaudeSession[]> = {};
+	for (const [key, list] of Object.entries(sessions)) {
+		result[key] = list.filter((s) => {
+			const latest = latestByUrl.get(s.sessionUrl);
+			return latest !== undefined && latest.key === key;
+		});
+	}
+	return result;
+}
+
+/**
  * セッション情報をエピックツリーにマージする。
  * Issue ノードの子として、対応するセッションノードを追加する。
  * 純粋関数: 元のツリーは変更しない。
@@ -25,8 +52,9 @@ export function mergeSessionsIntoTree(
 	tree: EpicTreeDto,
 	sessions: ClaudeSessionStorage,
 ): EpicTreeDto {
+	const cleaned = deduplicateSessionsAcrossIssues(sessions);
 	return {
-		roots: tree.roots.map((root) => mergeSessionsIntoNode(root, sessions)),
+		roots: tree.roots.map((root) => mergeSessionsIntoNode(root, cleaned)),
 	};
 }
 
