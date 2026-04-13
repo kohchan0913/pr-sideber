@@ -418,6 +418,164 @@ describe("ClaudeSessionWatcher", () => {
 		});
 	});
 
+	// Issue #34: 同一 sessionUrl が別 Issue key に存在する場合、古い方を削除する
+	describe("Issue #34 — cross-issue sessionUrl 重複排除", () => {
+		it("saveSession: セッションタイトル変更で Issue 番号が変わった場合、旧 key から削除される", async () => {
+			// 既存: session_X が Issue #1592 に紐付いている
+			chromeMock.storage.local.get.mockResolvedValue({
+				claudeSessions: {
+					"1592": [
+						{
+							sessionUrl: "https://claude.ai/code/session_012Ke5HvnrbFoCD8bNmAtZV4",
+							title: "[close]Inv #1592 -> #2108",
+							issueNumber: 1592,
+							detectedAt: "2026-04-01T00:00:00Z",
+							isLive: true,
+						},
+					],
+				},
+			});
+
+			watcher.startWatching();
+			const onUpdatedCallback = chromeMock.tabs.onUpdated.addListener.mock.calls[0][0];
+
+			// 同じ sessionUrl だがタイトルが変わり Issue #2571 として検出される
+			await onUpdatedCallback(
+				1,
+				{ title: "Investigate issue 2571 | Claude Code" },
+				{
+					url: "https://claude.ai/code/session_012Ke5HvnrbFoCD8bNmAtZV4",
+					title: "Investigate issue 2571 | Claude Code",
+				},
+			);
+
+			await vi.waitFor(() => {
+				expect(chromeMock.storage.local.set).toHaveBeenCalled();
+			});
+
+			const setCall = chromeMock.storage.local.set.mock.calls[0][0];
+			// 新しい Issue key に保存されている
+			expect(setCall.claudeSessions["2571"]).toHaveLength(1);
+			expect(setCall.claudeSessions["2571"][0].sessionUrl).toBe(
+				"https://claude.ai/code/session_012Ke5HvnrbFoCD8bNmAtZV4",
+			);
+			// 旧 Issue key から削除されている
+			expect(setCall.claudeSessions["1592"]).toHaveLength(0);
+		});
+
+		it("saveSession: 旧 key に他セッションがある場合、該当 URL のみ削除される", async () => {
+			chromeMock.storage.local.get.mockResolvedValue({
+				claudeSessions: {
+					"1592": [
+						{
+							sessionUrl: "https://claude.ai/code/session_DUPLICATE",
+							title: "[close]Inv #1592",
+							issueNumber: 1592,
+							detectedAt: "2026-04-01T00:00:00Z",
+							isLive: true,
+						},
+						{
+							sessionUrl: "https://claude.ai/code/session_OTHER",
+							title: "Inv #1592 別セッション",
+							issueNumber: 1592,
+							detectedAt: "2026-04-02T00:00:00Z",
+							isLive: false,
+						},
+					],
+				},
+			});
+
+			watcher.startWatching();
+			const onUpdatedCallback = chromeMock.tabs.onUpdated.addListener.mock.calls[0][0];
+
+			await onUpdatedCallback(
+				1,
+				{ title: "Investigate issue 2571 | Claude Code" },
+				{
+					url: "https://claude.ai/code/session_DUPLICATE",
+					title: "Investigate issue 2571 | Claude Code",
+				},
+			);
+
+			await vi.waitFor(() => {
+				expect(chromeMock.storage.local.set).toHaveBeenCalled();
+			});
+
+			const setCall = chromeMock.storage.local.set.mock.calls[0][0];
+			// 新 key に移動
+			expect(setCall.claudeSessions["2571"]).toHaveLength(1);
+			// 旧 key には別セッションだけ残る
+			expect(setCall.claudeSessions["1592"]).toHaveLength(1);
+			expect(setCall.claudeSessions["1592"][0].sessionUrl).toBe(
+				"https://claude.ai/code/session_OTHER",
+			);
+		});
+
+		it("handleContentScriptSessions: 同一 URL が別 Issue に移動する場合、旧 key から削除される", async () => {
+			chromeMock.storage.local.get.mockResolvedValue({
+				claudeSessions: {
+					"1592": [
+						{
+							sessionUrl: "https://claude.ai/code/session_CROSS",
+							title: "Inv #1592",
+							issueNumber: 1592,
+							detectedAt: "2026-04-01T00:00:00Z",
+							isLive: false,
+						},
+					],
+				},
+			});
+
+			await watcher.handleContentScriptSessions([
+				{
+					url: "https://claude.ai/code/session_CROSS",
+					title: "Investigate issue 2571",
+				},
+			]);
+
+			const setCall = chromeMock.storage.local.set.mock.calls[0][0];
+			expect(setCall.claudeSessions["2571"]).toHaveLength(1);
+			expect(setCall.claudeSessions["1592"]).toHaveLength(0);
+		});
+
+		it("saveSession: 同一 key 内での URL 重複は従来通り更新される (cross-issue ではない)", async () => {
+			chromeMock.storage.local.get.mockResolvedValue({
+				claudeSessions: {
+					"2571": [
+						{
+							sessionUrl: "https://claude.ai/code/session_SAME",
+							title: "Investigate issue 2571 (old)",
+							issueNumber: 2571,
+							detectedAt: "2026-04-01T00:00:00Z",
+							isLive: false,
+						},
+					],
+				},
+			});
+
+			watcher.startWatching();
+			const onUpdatedCallback = chromeMock.tabs.onUpdated.addListener.mock.calls[0][0];
+
+			await onUpdatedCallback(
+				1,
+				{ title: "Investigate issue 2571 | Claude Code" },
+				{
+					url: "https://claude.ai/code/session_SAME",
+					title: "Investigate issue 2571 | Claude Code",
+				},
+			);
+
+			await vi.waitFor(() => {
+				expect(chromeMock.storage.local.set).toHaveBeenCalled();
+			});
+
+			const setCall = chromeMock.storage.local.set.mock.calls[0][0];
+			// 同一 key 内で更新、1件のまま
+			expect(setCall.claudeSessions["2571"]).toHaveLength(1);
+			expect(setCall.claudeSessions["2571"][0].title).toBe("Investigate issue 2571 | Claude Code");
+		});
+	});
+
 	// Issue #27: ストレージ更新後に Side Panel へ broadcast しないと、後から検知された
 	// セッションが UI に反映されない (Side Panel は購読しても通知が来ないため再取得しない)
 	describe("Issue #27 — Side Panel への broadcast", () => {
