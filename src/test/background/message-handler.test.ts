@@ -116,13 +116,15 @@ describe("createMessageHandler", () => {
 		});
 
 		const response = sendResponse.mock.calls[0][0] as ResponseMessage<"AUTH_LOGOUT">;
-		expect(response).toEqual({
-			ok: false,
-			error: { code: "AUTH_LOGOUT_ERROR", message: "Logout failed" },
-		});
+		expect(response.ok).toBe(false);
+		if (!response.ok) {
+			expect(response.error.code).toBe("AUTH_LOGOUT_ERROR");
+			expect(response.error.message).toContain("Logout failed");
+			expect(response.error.message).toContain("Storage error");
+		}
 	});
 
-	it("should not leak internal error details in error response", async () => {
+	it("should include error details in error response for debugging", async () => {
 		mockAuth.requestDeviceCode.mockRejectedValue(
 			new Error("GitHub API internal error at https://github.com/login/device/code"),
 		);
@@ -137,8 +139,8 @@ describe("createMessageHandler", () => {
 		const response = sendResponse.mock.calls[0][0] as ResponseMessage<"AUTH_DEVICE_CODE">;
 		expect(response.ok).toBe(false);
 		if (!response.ok) {
-			expect(response.error.message).toBe("Device code request failed");
-			expect(response.error.message).not.toContain("github.com");
+			expect(response.error.message).toContain("Device code request failed");
+			expect(response.error.message).toContain("GitHub API internal error");
 		}
 	});
 
@@ -731,6 +733,221 @@ describe("createMessageHandler", () => {
 			expect(mockTabNavigation.navigateTabToUrl).not.toHaveBeenCalled();
 			const response = sendResponse.mock.calls[0][0];
 			expect(response).toEqual({ ok: true, data: undefined });
+		});
+	});
+
+	describe("FETCH_EPIC_TREE (cleanupClosedIssues セッション保持)", () => {
+		let mockIssueApi: { fetchIssues: ReturnType<typeof vi.fn> };
+		let mockGithubApi: { fetchPullRequests: ReturnType<typeof vi.fn> };
+		let mockEpicProcessor: { processEpicTree: ReturnType<typeof vi.fn> };
+		let mockClaudeSessionWatcher: {
+			cleanupClosedIssues: ReturnType<typeof vi.fn>;
+			getSessions: ReturnType<typeof vi.fn>;
+		};
+
+		/** GraphQL レスポンスの Issue edges を生成するヘルパー */
+		function makeIssuesJson(issueNumbers: readonly number[]): string {
+			return JSON.stringify({
+				data: {
+					issues: {
+						edges: issueNumbers.map((n) => ({ node: { number: n } })),
+					},
+				},
+			});
+		}
+
+		beforeEach(() => {
+			mockIssueApi = { fetchIssues: vi.fn() };
+			mockGithubApi = {
+				fetchPullRequests: vi.fn().mockResolvedValue({ rawJson: "{}", hasMore: false }),
+			};
+			mockEpicProcessor = {
+				processEpicTree: vi.fn().mockResolvedValue("mock-tree"),
+			};
+			mockClaudeSessionWatcher = {
+				cleanupClosedIssues: vi.fn().mockResolvedValue(undefined),
+				getSessions: vi.fn().mockResolvedValue({}),
+			};
+			services = {
+				auth: mockAuth,
+				issueApi: mockIssueApi,
+				githubApi: mockGithubApi,
+				epicProcessor: mockEpicProcessor,
+				claudeSessionWatcher: mockClaudeSessionWatcher,
+			} as unknown as AppServices;
+			handler = createMessageHandler(services);
+		});
+
+		it("cleanupClosedIssues にセッション保持済み Issue 番号が含まれた openNumbers が渡される", async () => {
+			// GraphQL 結果には Issue 10, 20 のみ含まれる
+			mockIssueApi.fetchIssues.mockResolvedValue(makeIssuesJson([10, 20]));
+			// ストレージにはセッションが Issue 2375 に紐付いている
+			mockClaudeSessionWatcher.getSessions.mockResolvedValue({
+				"2375": [
+					{
+						sessionUrl: "https://claude.ai/code/session_abc",
+						title: "Investigate issue 2375",
+						issueNumber: 2375,
+						detectedAt: "2026-04-06T00:00:00Z",
+						isLive: false,
+					},
+				],
+			});
+
+			const sendResponse = vi.fn();
+			handler({ type: "FETCH_EPIC_TREE" }, createTrustedSender(), sendResponse);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockClaudeSessionWatcher.cleanupClosedIssues).toHaveBeenCalled();
+			const openNumbers: Set<number> =
+				mockClaudeSessionWatcher.cleanupClosedIssues.mock.calls[0][0];
+			// GraphQL の 10, 20 に加えて、セッション保持中の 2375 も含まれている
+			expect(openNumbers.has(10)).toBe(true);
+			expect(openNumbers.has(20)).toBe(true);
+			expect(openNumbers.has(2375)).toBe(true);
+		});
+
+		it("セッション保持済みの Issue が GraphQL 結果に含まれなくても削除されない", async () => {
+			// GraphQL 結果には Issue 10 のみ
+			mockIssueApi.fetchIssues.mockResolvedValue(makeIssuesJson([10]));
+			// ストレージには Issue 500 のセッションがある
+			mockClaudeSessionWatcher.getSessions.mockResolvedValue({
+				"500": [
+					{
+						sessionUrl: "https://claude.ai/code/session_xyz",
+						title: "Inv #500 debug",
+						issueNumber: 500,
+						detectedAt: "2026-04-06T00:00:00Z",
+						isLive: true,
+					},
+				],
+			});
+
+			const sendResponse = vi.fn();
+			handler({ type: "FETCH_EPIC_TREE" }, createTrustedSender(), sendResponse);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockClaudeSessionWatcher.cleanupClosedIssues).toHaveBeenCalled();
+			const openNumbers: Set<number> =
+				mockClaudeSessionWatcher.cleanupClosedIssues.mock.calls[0][0];
+			// セッション保持中の Issue 500 が openNumbers に含まれるため削除されない
+			expect(openNumbers.has(500)).toBe(true);
+			expect(openNumbers.has(10)).toBe(true);
+		});
+	});
+
+	describe("OPEN_WORKSPACE", () => {
+		let mockWorkspaceOpen: { openWorkspace: ReturnType<typeof vi.fn> };
+
+		beforeEach(() => {
+			mockWorkspaceOpen = { openWorkspace: vi.fn().mockResolvedValue(undefined) };
+			services = {
+				auth: mockAuth,
+				workspaceOpen: mockWorkspaceOpen,
+			} as unknown as AppServices;
+			handler = createMessageHandler(services);
+		});
+
+		it("should call workspaceOpen.openWorkspace with payload", async () => {
+			const sendResponse = vi.fn();
+			const payload = {
+				issueNumber: 42,
+				issueUrl: "https://github.com/owner/repo/issues/42",
+				prUrl: "https://github.com/owner/repo/pull/123",
+				sessionUrl: "https://claude.ai/code/session-1",
+				senderWindowId: 100,
+			};
+
+			handler({ type: "OPEN_WORKSPACE", payload }, createTrustedSender(), sendResponse);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			expect(mockWorkspaceOpen.openWorkspace).toHaveBeenCalledWith(payload);
+			const response = sendResponse.mock.calls[0][0];
+			expect(response).toEqual({ ok: true, data: undefined });
+		});
+	});
+
+	describe("GET_DEBUG_STATE", () => {
+		let mockClaudeSessionWatcher: {
+			getSessions: ReturnType<typeof vi.fn>;
+		};
+		/** chrome.storage.local のインメモリストア */
+		let storageData: Record<string, unknown>;
+
+		beforeEach(() => {
+			const chromeMock = getChromeMock();
+			storageData = {};
+			chromeMock.storage.local.get.mockImplementation(async (key: string) => {
+				return { [key]: storageData[key] };
+			});
+			chromeMock.tabs.query.mockResolvedValue([
+				{ url: "https://claude.ai/code/session_1" },
+				{ url: "https://claude.ai/code/session_2" },
+			]);
+
+			mockClaudeSessionWatcher = {
+				getSessions: vi.fn().mockResolvedValue({
+					"42": [
+						{
+							sessionUrl: "https://claude.ai/code/session_1",
+							title: "Inv #42 debug",
+							issueNumber: 42,
+							detectedAt: "2026-04-08T00:00:00Z",
+							isLive: true,
+						},
+					],
+				}),
+			};
+			services = {
+				auth: mockAuth,
+				claudeSessionWatcher: mockClaudeSessionWatcher,
+			} as unknown as AppServices;
+			handler = createMessageHandler(services);
+		});
+
+		it("GET_DEBUG_STATE: DebugState を返す", async () => {
+			const sendResponse = vi.fn();
+
+			handler({ type: "GET_DEBUG_STATE" }, createTrustedSender(), sendResponse);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			const response = sendResponse.mock.calls[0][0];
+			expect(response.ok).toBe(true);
+			if (response.ok) {
+				expect(response.data.watcherTabCount).toBe(2);
+				expect(response.data.claudeSessions).toHaveProperty("42");
+				expect(Array.isArray(response.data.logs)).toBe(true);
+			}
+		});
+
+		it("GET_DEBUG_STATE: 内部エラー時にエラーレスポンスを返す", async () => {
+			mockClaudeSessionWatcher.getSessions.mockRejectedValue(new Error("Storage read failed"));
+			const sendResponse = vi.fn();
+
+			handler({ type: "GET_DEBUG_STATE" }, createTrustedSender(), sendResponse);
+
+			await vi.waitFor(() => {
+				expect(sendResponse).toHaveBeenCalled();
+			});
+
+			const response = sendResponse.mock.calls[0][0];
+			expect(response.ok).toBe(false);
+			if (!response.ok) {
+				expect(response.error.code).toBe("GET_DEBUG_STATE_ERROR");
+				expect(response.error.message).toContain("Failed to get debug state");
+			}
 		});
 	});
 });

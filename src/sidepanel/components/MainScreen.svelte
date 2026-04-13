@@ -1,29 +1,74 @@
 <script lang="ts">
 	import { untrack } from "svelte";
+	import type { EpicTreeDto } from "../../domain/ports/epic-processor.port";
 	import type { ProcessedPrsResult } from "../../domain/ports/pr-processor.port";
 	import type { CachedPrData } from "../../shared/types/cache";
-	import { isCacheUpdatedEvent, isTabUrlChangedEvent } from "../../shared/types/events";
+	import type { ClaudeSessionStorage } from "../../shared/types/claude-session";
+	import {
+		isCacheUpdatedEvent,
+		isClaudeSessionsUpdatedEvent,
+		isTabUrlChangedEvent,
+	} from "../../shared/types/events";
+	import { extractPrIssueLinks, movePrsToLinkedIssues } from "../usecase/merge-prs-to-issues";
+	import { mergeSessionsIntoTree } from "../usecase/merge-sessions";
+	import type { WorkspaceResources } from "../../shared/utils/workspace-resources";
+	import { filterTreeByPin } from "../usecase/filter-tree-by-pin";
+	import type { PinnedTabsStore } from "../stores/pinned-tabs.svelte";
+	import EpicSection from "./EpicSection.svelte";
+	import EpicTabBar from "./EpicTabBar.svelte";
 	import LogoutButton from "./LogoutButton.svelte";
 	import RelativeTime from "./RelativeTime.svelte";
+	import type { DebugState } from "../../shared/types/messages";
+	import DebugPanel from "./DebugPanel.svelte";
 	import PrSection from "./PrSection.svelte";
 
 	type Props = {
 		onLogout: () => Promise<void>;
 		fetchPrs: () => Promise<ProcessedPrsResult & { hasMore: boolean }>;
+		fetchEpicTree: () => Promise<{ tree: EpicTreeDto; prsRawJson: string }>;
+		getClaudeSessions: () => Promise<ClaudeSessionStorage>;
 		getCachedPrs: () => Promise<CachedPrData | null>;
 		loadPrsWithCache: (minutes: number) => Promise<(ProcessedPrsResult & { hasMore: boolean }) | null>;
 		subscribeToMessages: (callback: (message: unknown) => void) => () => void;
+		pinnedTabsStore: PinnedTabsStore;
 		onNavigate?: (url: string) => void;
+		onOpenWorkspace?: (resources: WorkspaceResources) => void;
 		getCurrentTabUrl?: () => Promise<string | null>;
+		getDebugState?: () => Promise<DebugState>;
 	};
 
-	const { onLogout, fetchPrs, getCachedPrs, loadPrsWithCache, subscribeToMessages, onNavigate, getCurrentTabUrl }: Props = $props();
+	const { onLogout, fetchPrs, fetchEpicTree, getClaudeSessions, getCachedPrs, loadPrsWithCache, subscribeToMessages, pinnedTabsStore, onNavigate, onOpenWorkspace, getCurrentTabUrl, getDebugState }: Props = $props();
+
+	let showDebugPanel = $state(false);
+
+	function handlePin(tab: { type: "epic" | "issue"; number: number; title: string }): void {
+		void pinnedTabsStore.pin(tab);
+	}
+
+	// activeKey から PinnedTabRef を導出してツリーをフィルタする
+	const displayedTree = $derived.by(() => {
+		if (!epicData) return null;
+		const key = pinnedTabsStore.activeKey;
+		if (!key) return epicData;
+		const match = pinnedTabsStore.pinned.find((p) => `${p.type}-${p.number}` === key);
+		if (!match) return epicData;
+		const filtered = filterTreeByPin(epicData, { type: match.type, number: match.number });
+		return filtered ?? epicData;
+	});
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let data = $state<(ProcessedPrsResult & { hasMore: boolean }) | null>(null);
 	let lastUpdatedAt = $state<string | undefined>(undefined);
 	let activeTabUrl = $state<string | null>(null);
+	let epicData = $state<EpicTreeDto | null>(null);
+	let epicError = $state<string | null>(null);
+	let activeWorkspaceIssueNumber = $state<number | null>(null);
+
+	function handleOpenWorkspace(resources: WorkspaceResources): void {
+		activeWorkspaceIssueNumber = resources.issueNumber;
+		onOpenWorkspace?.(resources);
+	}
 
 	async function loadPrs(): Promise<void> {
 		loading = true;
@@ -36,6 +81,17 @@
 		} finally {
 			loading = false;
 		}
+
+		try {
+			const { tree, prsRawJson } = await fetchEpicTree();
+			const prLinks = extractPrIssueLinks(prsRawJson);
+			const treeWithPrs = movePrsToLinkedIssues(tree, prLinks);
+			const sessions = await getClaudeSessions();
+			epicData = mergeSessionsIntoTree(treeWithPrs, sessions);
+			epicError = null;
+		} catch (e: unknown) {
+			epicError = e instanceof Error ? e.message : "Failed to fetch epic tree";
+		}
 	}
 
 	// 初期ロード: キャッシュ → loadPrsWithCache (新鮮度チェック付き)
@@ -43,6 +99,15 @@
 		let cancelled = false;
 
 		untrack(async () => {
+			// Pin タブの永続状態を復元
+			try {
+				await pinnedTabsStore.load();
+			} catch (err: unknown) {
+				if (import.meta.env.DEV) {
+					console.warn("[MainScreen] pinnedTabsStore.load failed:", err);
+				}
+			}
+
 			// まずキャッシュから表示
 			try {
 				const cached = await getCachedPrs();
@@ -75,6 +140,21 @@
 			} finally {
 				if (!cancelled) {
 					loading = false;
+				}
+			}
+
+			// Epic ツリーを取得し、PR-Issue リンク + Claude セッション情報をマージ
+			try {
+				const { tree, prsRawJson } = await fetchEpicTree();
+				const prLinks = extractPrIssueLinks(prsRawJson);
+				const treeWithPrs = movePrsToLinkedIssues(tree, prLinks);
+				const sessions = await getClaudeSessions();
+				if (!cancelled) {
+					epicData = mergeSessionsIntoTree(treeWithPrs, sessions);
+				}
+			} catch (e: unknown) {
+				if (!cancelled) {
+					epicError = e instanceof Error ? e.message : "Failed to fetch epic tree";
 				}
 			}
 
@@ -116,6 +196,19 @@
 			if (isTabUrlChangedEvent(message)) {
 				activeTabUrl = message.url;
 			}
+			if (isClaudeSessionsUpdatedEvent(message)) {
+				getClaudeSessions()
+					.then((sessions) => {
+						if (epicData) {
+							epicData = mergeSessionsIntoTree(epicData, sessions);
+						}
+					})
+					.catch((err: unknown) => {
+						if (import.meta.env.DEV) {
+							console.warn("[MainScreen] claude sessions reload failed:", err);
+						}
+					});
+			}
 		}
 
 		const unsubscribe = subscribeToMessages(onMessage);
@@ -148,6 +241,18 @@
 			{#if lastUpdatedAt}
 				<span class="last-updated"><RelativeTime dateStr={lastUpdatedAt} /></span>
 			{/if}
+			{#if getDebugState}
+				<button
+					class="debug-toggle"
+					class:active={showDebugPanel}
+					onclick={() => { showDebugPanel = !showDebugPanel; }}
+					aria-label="Toggle debug panel"
+				>
+					<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+						<path d="M4.978.855a.5.5 0 1 0-.956.29l.41 1.352A4.985 4.985 0 0 0 3 6h10a4.985 4.985 0 0 0-1.432-3.503l.41-1.352a.5.5 0 1 0-.956-.29l-.291.956A4.978 4.978 0 0 0 8 1a4.979 4.979 0 0 0-2.731.811l-.29-.956zM13 6v1H8.5V3.556a4.024 4.024 0 0 1 2.231.811l.291-.956zM6 .278l.291.956A4.028 4.028 0 0 0 4.018 3.5L3 6v1h4.5V3.556A4.094 4.094 0 0 1 6 .278zM1 8.5A.5.5 0 0 1 1.5 8H6v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5H1.5a.5.5 0 0 1-.5-.5zm9.5-.5H15a.5.5 0 0 1 0 1h-1.5V12a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V8.5z"/>
+					</svg>
+				</button>
+			{/if}
 			<LogoutButton {onLogout} />
 		</div>
 	</header>
@@ -165,8 +270,16 @@
 				<p class="error-text">{error}</p>
 			</div>
 		{/if}
-		<PrSection title="My PRs" items={data.myPrs.items} {onNavigate} {activeTabUrl} />
+		{#if epicError}
+			<div class="error-banner"><p class="error-text">{epicError}</p></div>
+		{/if}
+		<EpicTabBar store={pinnedTabsStore} />
+		<EpicSection tree={displayedTree} onPin={handlePin} {onNavigate} onOpenWorkspace={handleOpenWorkspace} {activeTabUrl} {activeWorkspaceIssueNumber} />
 		<PrSection title="Review Requests" items={data.reviewRequests.items} {onNavigate} {activeTabUrl} />
+	{/if}
+
+	{#if showDebugPanel && getDebugState}
+		<DebugPanel {getDebugState} />
 	{/if}
 </main>
 
@@ -291,5 +404,30 @@
 
 	.retry-button:active {
 		opacity: 0.7;
+	}
+
+	.debug-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		background: none;
+		border: 1px solid transparent;
+		border-radius: 3px;
+		cursor: pointer;
+		color: var(--color-text-secondary);
+		transition: color 0.15s, border-color 0.15s;
+	}
+
+	.debug-toggle:hover {
+		color: var(--color-accent-primary);
+		border-color: var(--color-border-primary);
+	}
+
+	.debug-toggle.active {
+		color: var(--color-accent-primary);
+		border-color: var(--color-accent-primary);
 	}
 </style>
