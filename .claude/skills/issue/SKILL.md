@@ -60,22 +60,16 @@ gh issue list --state open --limit 50 --json number,title,body,labels
 
 テンプレートの必須フィールドを漏れなく埋める。
 
-## Step 4: Project Category 付与
+## Step 4: Project への追加と Status 設定
 
-IMPORTANT: Issue 作成後、必ず Project に追加して Category を1つ設定する。Category なしで完了としない。
+IMPORTANT: Issue 作成後、必ず Project に追加して Status を設定する。
 
-ユーザーに Category を確認し、以下の手順で設定する:
+Project: `@miyashitaAdacotech's untitled project` (ID: `PVT_kwHOD2yevc4BOdb4`)
+Status フィールドの選択肢: `Todo` / `In Progress` / `Done`
 
-| Category | 判断基準 |
-|----------|----------|
-| `Feature` | 機能追加・UX 改良。些末なものは Nice-to-Have |
-| `Tech-Risk` | 他の機能開発をブロックしうる技術負債の解消 |
-| `UX-Risk` | バグ・重度なセキュリティ問題等ユーザーに迷惑をかける問題 |
-| `Agent-Harness` | Skills・Agents・Rules・Hooks などハーネス基盤の整備 |
-| `Refactor` | Tech-Risk より軽症な技術負債の解消。いつでも良い |
-| `Nice-to-Have` | 軽微な改善・些末な Feature。いつでも良い |
+デフォルトは `Todo`。着手中の Issue は `In Progress` を指定する。
 
-**[reference/commands.md](reference/commands.md) の「Project Category 付与」セクションを参照してコマンドを実行する。**
+**[reference/commands.md](reference/commands.md) の「Project への追加と Status 設定」セクションを参照してコマンドを実行する。**
 
 ## Step 5: リレーション設定
 
