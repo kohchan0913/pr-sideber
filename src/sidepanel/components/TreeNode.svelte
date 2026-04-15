@@ -3,6 +3,7 @@
 	import { safeUrl } from "../../shared/utils/url";
 	import type { WorkspaceResources } from "../../shared/utils/workspace-resources";
 	import { resolveWorkspaceResources } from "../../shared/utils/workspace-resources";
+	import { nodeKeyFor } from "../usecase/find-node-in-tree";
 	import TreeNode from "./TreeNode.svelte";
 
 	type Props = {
@@ -16,6 +17,8 @@
 	};
 
 	const { node, activeTabUrl, activeWorkspaceIssueNumber, parentIsActiveWorkspace = false, onNavigate, onOpenWorkspace, onPin }: Props = $props();
+
+	const dataNodeKey = $derived(nodeKeyFor(node.kind));
 
 	function handlePin(event: MouseEvent): void {
 		event.stopPropagation();
@@ -73,6 +76,7 @@
 	class="tree-node"
 	class:active={isActive}
 	class:workspace-active={isWorkspaceActive}
+	data-node-key={dataNodeKey}
 	style="padding-left: calc({displayDepth} * 1.2rem)"
 >
 	{#if node.kind.type === "epic"}
@@ -179,7 +183,7 @@
 
 	{#if open && hasChildren}
 		<div class="children">
-			{#each node.children as child (child.kind.type === "epic" ? `epic-${child.kind.number}` : child.kind.type === "issue" ? `issue-${child.kind.number}` : child.kind.type === "pullRequest" ? `pr-${child.kind.number}` : `session-${child.kind.issueNumber}-${child.kind.url}`)}
+			{#each node.children as child (nodeKeyFor(child.kind))}
 				<TreeNode node={child} {activeTabUrl} {activeWorkspaceIssueNumber} parentIsActiveWorkspace={isWorkspaceActive} {onNavigate} {onOpenWorkspace} {onPin} />
 			{/each}
 		</div>
@@ -199,6 +203,25 @@
 	.tree-node.workspace-active {
 		background: rgba(163, 113, 247, 0.15);
 		border-left: 3px solid #a371f7;
+	}
+
+	:global(.tree-node.search-hit) {
+		animation: search-hit-flash 2.5s ease-out forwards;
+	}
+
+	@keyframes search-hit-flash {
+		0% {
+			background: rgba(255, 210, 77, 0.45);
+			box-shadow: inset 3px 0 0 0 #ffd24d;
+		}
+		70% {
+			background: rgba(255, 210, 77, 0.45);
+			box-shadow: inset 3px 0 0 0 #ffd24d;
+		}
+		100% {
+			background: transparent;
+			box-shadow: inset 3px 0 0 0 transparent;
+		}
 	}
 
 	.node-header {

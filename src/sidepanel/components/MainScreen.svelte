@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from "svelte";
+	import { tick, untrack } from "svelte";
 	import type { EpicTreeDto } from "../../domain/ports/epic-processor.port";
 	import type { ProcessedPrsResult } from "../../domain/ports/pr-processor.port";
 	import type { CachedPrData } from "../../shared/types/cache";
@@ -13,9 +13,11 @@
 	import { mergeSessionsIntoTree } from "../usecase/merge-sessions";
 	import type { WorkspaceResources } from "../../shared/utils/workspace-resources";
 	import { filterTreeByPin } from "../usecase/filter-tree-by-pin";
+	import { findNodeInTree, nodeKeyFor } from "../usecase/find-node-in-tree";
 	import type { PinnedTabsStore } from "../stores/pinned-tabs.svelte";
 	import EpicSection from "./EpicSection.svelte";
 	import EpicTabBar from "./EpicTabBar.svelte";
+	import IssueSearchBox from "./IssueSearchBox.svelte";
 	import LogoutButton from "./LogoutButton.svelte";
 	import RelativeTime from "./RelativeTime.svelte";
 	import type { DebugState } from "../../shared/types/messages";
@@ -40,10 +42,75 @@
 	const { onLogout, fetchPrs, fetchEpicTree, getClaudeSessions, getCachedPrs, loadPrsWithCache, subscribeToMessages, pinnedTabsStore, onNavigate, onOpenWorkspace, getCurrentTabUrl, getDebugState }: Props = $props();
 
 	let showDebugPanel = $state(false);
+	let searchNotFoundMessage = $state<string | null>(null);
+	const SEARCH_HIT_ANIMATION_MS = 2500;
+	const SEARCH_NOT_FOUND_TIMEOUT_MS = 3000;
+	let searchNotFoundTimer: ReturnType<typeof setTimeout> | null = null;
+	let searchHitTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function handlePin(tab: { type: "epic" | "issue"; number: number; title: string }): void {
 		void pinnedTabsStore.pin(tab);
 	}
+
+	async function scrollAndFlash(nodeKey: string): Promise<void> {
+		// Pin タブ切替などで DOM が差し替わる可能性があるため、Svelte の更新を待つ
+		await tick();
+		const el = document.querySelector<HTMLElement>(`[data-node-key="${CSS.escape(nodeKey)}"]`);
+		if (!el) {
+			// findNodeInTree で存在確認済みでも親が折りたたまれていると DOM には無い。
+			// サイレントにせずユーザーに伝える。
+			showNotFound("該当ノードが現在表示されていません (親が折りたたまれている可能性)");
+			return;
+		}
+		el.scrollIntoView({ behavior: "smooth", block: "center" });
+		if (searchHitTimer) clearTimeout(searchHitTimer);
+		el.classList.remove("search-hit");
+		// Svelte の class バインディングではアニメーション再スタートが保証できないため、
+		// reflow を強制して同一要素に再度 .search-hit を付与し animation を再生する
+		void el.offsetWidth;
+		el.classList.add("search-hit");
+		searchHitTimer = setTimeout(() => {
+			el.classList.remove("search-hit");
+			searchHitTimer = null;
+		}, SEARCH_HIT_ANIMATION_MS);
+	}
+
+	function showNotFound(message: string): void {
+		searchNotFoundMessage = message;
+		if (searchNotFoundTimer) clearTimeout(searchNotFoundTimer);
+		searchNotFoundTimer = setTimeout(() => {
+			searchNotFoundMessage = null;
+			searchNotFoundTimer = null;
+		}, SEARCH_NOT_FOUND_TIMEOUT_MS);
+	}
+
+	function handleSearchIssue(issueNumber: number): void {
+		if (!epicData) {
+			showNotFound("ツリーがまだロードされていません");
+			return;
+		}
+		const node = findNodeInTree(epicData, issueNumber);
+		if (!node) {
+			showNotFound(`#${issueNumber} は現在のツリーに存在しません`);
+			return;
+		}
+		searchNotFoundMessage = null;
+
+		// Pin タブでフィルタされている場合、該当ノードが表示範囲外なら All タブに切り替える
+		const key = pinnedTabsStore.activeKey;
+		if (key && displayedTree && !findNodeInTree(displayedTree, issueNumber)) {
+			void pinnedTabsStore.activate(null);
+		}
+
+		void scrollAndFlash(nodeKeyFor(node.kind));
+	}
+
+	$effect(() => {
+		return () => {
+			if (searchNotFoundTimer) clearTimeout(searchNotFoundTimer);
+			if (searchHitTimer) clearTimeout(searchHitTimer);
+		};
+	});
 
 	// activeKey から PinnedTabRef を導出してツリーをフィルタする
 	const displayedTree = $derived.by(() => {
@@ -221,40 +288,43 @@
 
 <main>
 	<header>
-		<div class="header-left">
-			<h1>PR Sidebar</h1>
-			<button
-				class="reload-button"
-				class:spinning={loading}
-				onclick={loadPrs}
-				disabled={loading}
-				aria-label="Reload"
-			>
-				<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-					<path d="M8 3a5 5 0 0 0-4.546 2.914.5.5 0 1 1-.908-.428A6 6 0 1 1 2.25 9.665a.5.5 0 1 1 .958.286A5 5 0 1 0 8 3z"/>
-					<path d="M8 1.5a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0V2a.5.5 0 0 1 .5-.5z"/>
-					<path d="M5.146 3.854a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708.708l-2.5 2.5a.5.5 0 0 1-.708 0z"/>
-				</svg>
-			</button>
-		</div>
-		<div class="header-right">
-			{#if lastUpdatedAt}
-				<span class="last-updated"><RelativeTime dateStr={lastUpdatedAt} /></span>
-			{/if}
-			{#if getDebugState}
+		<div class="header-top">
+			<div class="header-left">
+				<h1>PR Sidebar</h1>
 				<button
-					class="debug-toggle"
-					class:active={showDebugPanel}
-					onclick={() => { showDebugPanel = !showDebugPanel; }}
-					aria-label="Toggle debug panel"
+					class="reload-button"
+					class:spinning={loading}
+					onclick={loadPrs}
+					disabled={loading}
+					aria-label="Reload"
 				>
-					<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-						<path d="M4.978.855a.5.5 0 1 0-.956.29l.41 1.352A4.985 4.985 0 0 0 3 6h10a4.985 4.985 0 0 0-1.432-3.503l.41-1.352a.5.5 0 1 0-.956-.29l-.291.956A4.978 4.978 0 0 0 8 1a4.979 4.979 0 0 0-2.731.811l-.29-.956zM13 6v1H8.5V3.556a4.024 4.024 0 0 1 2.231.811l.291-.956zM6 .278l.291.956A4.028 4.028 0 0 0 4.018 3.5L3 6v1h4.5V3.556A4.094 4.094 0 0 1 6 .278zM1 8.5A.5.5 0 0 1 1.5 8H6v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5H1.5a.5.5 0 0 1-.5-.5zm9.5-.5H15a.5.5 0 0 1 0 1h-1.5V12a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V8.5z"/>
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+						<path d="M8 3a5 5 0 0 0-4.546 2.914.5.5 0 1 1-.908-.428A6 6 0 1 1 2.25 9.665a.5.5 0 1 1 .958.286A5 5 0 1 0 8 3z"/>
+						<path d="M8 1.5a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0V2a.5.5 0 0 1 .5-.5z"/>
+						<path d="M5.146 3.854a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708.708l-2.5 2.5a.5.5 0 0 1-.708 0z"/>
 					</svg>
 				</button>
-			{/if}
-			<LogoutButton {onLogout} />
+			</div>
+			<div class="header-right">
+				{#if lastUpdatedAt}
+					<span class="last-updated"><RelativeTime dateStr={lastUpdatedAt} /></span>
+				{/if}
+				{#if getDebugState}
+					<button
+						class="debug-toggle"
+						class:active={showDebugPanel}
+						onclick={() => { showDebugPanel = !showDebugPanel; }}
+						aria-label="Toggle debug panel"
+					>
+						<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+							<path d="M4.978.855a.5.5 0 1 0-.956.29l.41 1.352A4.985 4.985 0 0 0 3 6h10a4.985 4.985 0 0 0-1.432-3.503l.41-1.352a.5.5 0 1 0-.956-.29l-.291.956A4.978 4.978 0 0 0 8 1a4.979 4.979 0 0 0-2.731.811l-.29-.956zM13 6v1H8.5V3.556a4.024 4.024 0 0 1 2.231.811l.291-.956zM6 .278l.291.956A4.028 4.028 0 0 0 4.018 3.5L3 6v1h4.5V3.556A4.094 4.094 0 0 1 6 .278zM1 8.5A.5.5 0 0 1 1.5 8H6v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5H1.5a.5.5 0 0 1-.5-.5zm9.5-.5H15a.5.5 0 0 1 0 1h-1.5V12a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V8.5z"/>
+						</svg>
+					</button>
+				{/if}
+				<LogoutButton {onLogout} />
+			</div>
 		</div>
+		<IssueSearchBox onSearch={handleSearchIssue} notFoundMessage={searchNotFoundMessage} />
 	</header>
 
 	{#if loading && !data}
@@ -286,14 +356,20 @@
 <style>
 	header {
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
+		flex-direction: column;
+		gap: 0.25rem;
 		padding: 0.5rem 0;
 		border-bottom: 1px solid var(--color-border-primary);
 		position: sticky;
 		top: 0;
 		background: var(--color-bg-primary);
 		z-index: 10;
+	}
+
+	.header-top {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
 	}
 
 	h1 {
