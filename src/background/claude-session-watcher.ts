@@ -32,6 +32,7 @@ function removeDuplicateUrlFromOtherKeys(
  * - "Investigate issue 2185" -> 2185
  * - "[close] issue 1966" -> 1966
  * - "Inv #2013 -> #2065 [#1671]..." -> 2013
+ * - "playwright codegenみたいなのEpic 2576" -> 2576 (Issue #40)
  */
 export function extractIssueNumberFromTitle(title: string): number | null {
 	// "#数字" パターン (例: "Inv #1882", "#2013 -> #2065")
@@ -44,6 +45,13 @@ export function extractIssueNumberFromTitle(title: string): number | null {
 	const issueMatch = /issue\s+(\d+)/i.exec(title);
 	if (issueMatch) {
 		return Number(issueMatch[1]);
+	}
+
+	// "epic 数字" パターン — 大文字小文字不問 (例: "...Epic 2576")
+	// `#` や `issue` キーワードを含まない Epic タイトルをカバーする (Issue #40)
+	const epicMatch = /epic\s+(\d+)/i.exec(title);
+	if (epicMatch) {
+		return Number(epicMatch[1]);
 	}
 
 	return null;

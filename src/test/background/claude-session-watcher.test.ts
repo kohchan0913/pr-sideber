@@ -46,6 +46,24 @@ describe("extractIssueNumberFromTitle", () => {
 	it("extracts from 'Inv #1882 fix tests | Claude Code'", () => {
 		expect(extractIssueNumberFromTitle("Inv #1882 fix tests | Claude Code")).toBe(1882);
 	});
+
+	// Issue #40: "Epic N" 形式のタイトル (# や 'issue' キーワードを含まない) にも対応する
+	it("extracts from 'playwright codegenみたいなのEpic 2576'", () => {
+		expect(extractIssueNumberFromTitle("playwright codegenみたいなのEpic 2576")).toBe(2576);
+	});
+
+	it("extracts from 'epic 42' (lowercase)", () => {
+		expect(extractIssueNumberFromTitle("epic 42")).toBe(42);
+	});
+
+	it("extracts from 'Epic 2576 | Claude Code' with suffix", () => {
+		expect(extractIssueNumberFromTitle("Epic 2576 | Claude Code")).toBe(2576);
+	});
+
+	// `#` パターンが Epic より優先されることを保証する (混在ケース)
+	it("prioritizes '#N' over 'Epic N' when both appear", () => {
+		expect(extractIssueNumberFromTitle("Inv #1000 Epic 2576")).toBe(1000);
+	});
 });
 
 describe("ClaudeSessionWatcher", () => {
