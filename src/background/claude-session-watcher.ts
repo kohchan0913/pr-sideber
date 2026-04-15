@@ -54,6 +54,21 @@ export function extractIssueNumberFromTitle(title: string): number | null {
 		return Number(epicMatch[1]);
 	}
 
+	// 末尾数字フォールバック — キーワードなしタイトル (例: "Context Rot対策 2598") を救済する (Issue #42)
+	// 語境界あり・3桁以上・末尾限定で誤検出を最小化。" | Claude Code" サフィックスは許容。
+	// フォールバック発動は logDebug で追跡可能にする (誤検出デバッグ用)。
+	const trailingMatch = /(?:^|\s)(\d{3,})(?:\s*\|.*)?$/.exec(title);
+	if (trailingMatch) {
+		const issueNumber = Number(trailingMatch[1]);
+		logDebug(
+			"info",
+			"watcher",
+			"extractIssueNumberFromTitle matched via trailing-digit fallback",
+			`title="${title}" → ${issueNumber}`,
+		).catch(() => {});
+		return issueNumber;
+	}
+
 	return null;
 }
 
