@@ -64,6 +64,38 @@ describe("extractIssueNumberFromTitle", () => {
 	it("prioritizes '#N' over 'Epic N' when both appear", () => {
 		expect(extractIssueNumberFromTitle("Inv #1000 Epic 2576")).toBe(1000);
 	});
+
+	// Issue #42: キーワードなし末尾数字フォールバック
+	it("extracts from 'Context Rot対策 2598' (trailing digit, no keyword)", () => {
+		expect(extractIssueNumberFromTitle("Context Rot対策 2598")).toBe(2598);
+	});
+
+	it("extracts from 'Context Rot対策 2598 | Claude Code' (with suffix)", () => {
+		expect(extractIssueNumberFromTitle("Context Rot対策 2598 | Claude Code")).toBe(2598);
+	});
+
+	it("returns null for '2026 roadmap' (digit is not trailing)", () => {
+		expect(extractIssueNumberFromTitle("2026 roadmap")).toBeNull();
+	});
+
+	it("returns null for 'Plan for 2026 migration' (trailing is word)", () => {
+		expect(extractIssueNumberFromTitle("Plan for 2026 migration")).toBeNull();
+	});
+
+	// 語境界: "V2598" のように文字列内の数字は末尾フォールバックで拾わない
+	it("returns null for 'V2598' (no word boundary before digits)", () => {
+		expect(extractIssueNumberFromTitle("V2598")).toBeNull();
+	});
+
+	// 2桁以下はフォールバック対象外 (既存 issue/epic パターンで拾われる範囲と衝突回避)
+	it("returns null for 'some title 42' (2 digits below threshold)", () => {
+		expect(extractIssueNumberFromTitle("some title 42")).toBeNull();
+	});
+
+	// 優先順確認: 末尾数字より # が優先
+	it("prioritizes '#N' over trailing digit fallback", () => {
+		expect(extractIssueNumberFromTitle("something #100 context 2598")).toBe(100);
+	});
 });
 
 describe("ClaudeSessionWatcher", () => {
