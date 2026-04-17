@@ -12,8 +12,12 @@ import { extractSessionIdFromUrl } from "../../shared/utils/session-id";
 type ResolvedSession = ClaudeSession & { readonly isManuallyMapped: boolean };
 
 /**
- * 同一タイトルのセッションを重複排除し、各タイトルで最新のもののみ残す。
- * 同じ Issue に対して複数セッション URL が存在するケースに対応。
+ * 同一タイトルのセッションを重複排除し、各タイトルで代表 1 件のみ残す。
+ *
+ * tiebreaker:
+ *   1. 手動マッピング済み (`isManuallyMapped: true`) を優先する。ユーザーの明示的操作を
+ *      新しい regex 由来セッションが飲み込んで UI から消すのを防ぐ。
+ *   2. 同じ `isManuallyMapped` の場合は `detectedAt` が新しい方を採用する。
  */
 function deduplicateSessionsByTitle(
 	sessions: readonly ResolvedSession[],
@@ -21,7 +25,18 @@ function deduplicateSessionsByTitle(
 	const byTitle = new Map<string, ResolvedSession>();
 	for (const s of sessions) {
 		const existing = byTitle.get(s.title);
-		if (!existing || s.detectedAt > existing.detectedAt) {
+		if (!existing) {
+			byTitle.set(s.title, s);
+			continue;
+		}
+		// 手動マッピング優先 (既存が手動なら置き換えない)
+		if (existing.isManuallyMapped && !s.isManuallyMapped) continue;
+		// 新規が手動で既存が非手動なら置き換え、それ以外は detectedAt で決定
+		if (s.isManuallyMapped && !existing.isManuallyMapped) {
+			byTitle.set(s.title, s);
+			continue;
+		}
+		if (s.detectedAt > existing.detectedAt) {
 			byTitle.set(s.title, s);
 		}
 	}
@@ -70,10 +85,14 @@ function resolveEffectivePlacement(
 	const result = new Map<number, ResolvedSession[]>();
 	for (const [issueKey, list] of Object.entries(sessions)) {
 		const regexIssueNum = Number(issueKey);
+		const hasValidRegexKey = Number.isInteger(regexIssueNum) && regexIssueNum > 0;
 		for (const session of list) {
 			const sessionId = extractSessionIdFromUrl(session.sessionUrl);
 			const manualIssueNum = sessionId !== null ? mapping[sessionId] : undefined;
 			const isManuallyMapped = manualIssueNum !== undefined;
+			// regex key が非正整数 (NaN/0/負値/非数値) の場合は手動マッピングがあれば救済し、
+			// なければ effective placement を諦める (どの Issue ノードにも合致しない)。
+			if (manualIssueNum === undefined && !hasValidRegexKey) continue;
 			const effectiveIssueNum = manualIssueNum ?? regexIssueNum;
 			const placed: ResolvedSession = { ...session, isManuallyMapped };
 			const bucket = result.get(effectiveIssueNum);

@@ -122,4 +122,12 @@ describe("extractSessionIdFromUrl", () => {
 		expect(extractSessionIdFromUrl("not-a-url")).toBeNull();
 		expect(extractSessionIdFromUrl("")).toBeNull();
 	});
+
+	it("https://claude.ai 以外のオリジンは拒否する (scheme/host 検証)", () => {
+		// javascript:/data: 等のスキーム混入や、フィッシングドメインが mapping lookup に侵入するのを防ぐ。
+		expect(extractSessionIdFromUrl("http://claude.ai/code/session_abc")).toBeNull();
+		expect(extractSessionIdFromUrl("https://evil.example.com/code/session_abc")).toBeNull();
+		expect(extractSessionIdFromUrl("javascript:session_abc")).toBeNull();
+		expect(extractSessionIdFromUrl("data:text/plain,session_abc")).toBeNull();
+	});
 });
