@@ -23,11 +23,16 @@ type ChromeMock = {
 			addListener: ReturnType<typeof vi.fn>;
 			removeListener: ReturnType<typeof vi.fn>;
 		};
+		onMessageExternal: {
+			addListener: ReturnType<typeof vi.fn>;
+			removeListener: ReturnType<typeof vi.fn>;
+		};
 		onSuspend: {
 			addListener: ReturnType<typeof vi.fn>;
 			removeListener: ReturnType<typeof vi.fn>;
 		};
 		lastError: chrome.runtime.LastError | undefined;
+		getURL: ReturnType<typeof vi.fn>;
 	};
 	alarms: {
 		create: ReturnType<typeof vi.fn>;
@@ -54,9 +59,21 @@ type ChromeMock = {
 			addListener: ReturnType<typeof vi.fn>;
 			removeListener: ReturnType<typeof vi.fn>;
 		};
+		onRemoved: {
+			addListener: ReturnType<typeof vi.fn>;
+			removeListener: ReturnType<typeof vi.fn>;
+		};
 	};
 	windows: {
 		update: ReturnType<typeof vi.fn>;
+		create: ReturnType<typeof vi.fn>;
+		get: ReturnType<typeof vi.fn>;
+		getCurrent: ReturnType<typeof vi.fn>;
+	};
+	system: {
+		display: {
+			getInfo: ReturnType<typeof vi.fn>;
+		};
 	};
 };
 
@@ -86,11 +103,16 @@ function createChromeMock(): ChromeMock {
 				addListener: vi.fn(),
 				removeListener: vi.fn(),
 			},
+			onMessageExternal: {
+				addListener: vi.fn(),
+				removeListener: vi.fn(),
+			},
 			onSuspend: {
 				addListener: vi.fn(),
 				removeListener: vi.fn(),
 			},
 			lastError: undefined,
+			getURL: vi.fn((path: string) => `chrome-extension://test-extension-id/${path}`),
 		},
 		alarms: {
 			create: vi.fn(),
@@ -117,9 +139,21 @@ function createChromeMock(): ChromeMock {
 				addListener: vi.fn(),
 				removeListener: vi.fn(),
 			},
+			onRemoved: {
+				addListener: vi.fn(),
+				removeListener: vi.fn(),
+			},
 		},
 		windows: {
 			update: vi.fn(),
+			create: vi.fn(),
+			get: vi.fn(),
+			getCurrent: vi.fn().mockResolvedValue({ id: 1 }),
+		},
+		system: {
+			display: {
+				getInfo: vi.fn(),
+			},
 		},
 	};
 }

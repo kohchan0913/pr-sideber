@@ -28,6 +28,9 @@ export default defineConfig(() => {
 			exclude: ["adapter-wasm"],
 		},
 		server: {
+			cors: {
+				origin: [/chrome-extension:\/\//],
+			},
 			fs: {
 				allow: ["src", "rust-core/crates/adapter-wasm/pkg"],
 			},

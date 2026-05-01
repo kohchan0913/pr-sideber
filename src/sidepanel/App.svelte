@@ -1,20 +1,32 @@
 <script lang="ts">
 	import { untrack } from "svelte";
+	import type { EpicTreeDto } from "../domain/ports/epic-processor.port";
+	import type { ClaudeSessionStorage, SessionIssueMapping } from "../shared/types/claude-session";
 	import LoginScreen from "./components/LoginScreen.svelte";
 	import MainScreen from "./components/MainScreen.svelte";
 	import type { createAuthUseCase } from "../shared/usecase/auth.usecase.js";
 	import type { createPrUseCase } from "../shared/usecase/pr.usecase.js";
 	import type { DeviceFlowController } from "../shared/usecase/device-flow.controller.js";
+	import type { DebugState } from "../shared/types/messages";
+	import type { WorkspaceResources } from "../shared/utils/workspace-resources";
+	import type { PinnedTabsStore } from "./stores/pinned-tabs.svelte";
 
 	type Props = {
 		authUseCase: Pick<ReturnType<typeof createAuthUseCase>, "checkAuth" | "logout">;
 		prUseCase: ReturnType<typeof createPrUseCase>;
+		fetchEpicTree: () => Promise<{ tree: EpicTreeDto; prsRawJson: string }>;
+		getClaudeSessions: () => Promise<ClaudeSessionStorage>;
+		getSessionIssueMappings: () => Promise<SessionIssueMapping>;
 		deviceFlowController: DeviceFlowController;
 		subscribeToMessages: (callback: (message: unknown) => void) => () => void;
+		subscribeToMappingChanges?: (callback: () => void) => () => void;
+		pinnedTabsStore: PinnedTabsStore;
 		onNavigate?: (url: string) => void;
+		onOpenWorkspace?: (resources: WorkspaceResources) => void;
 		getCurrentTabUrl?: () => Promise<string | null>;
+		getDebugState?: () => Promise<DebugState>;
 	};
-	const { authUseCase, prUseCase, deviceFlowController, subscribeToMessages, onNavigate, getCurrentTabUrl }: Props = $props();
+	const { authUseCase, prUseCase, fetchEpicTree, getClaudeSessions, getSessionIssueMappings, deviceFlowController, subscribeToMessages, subscribeToMappingChanges, pinnedTabsStore, onNavigate, onOpenWorkspace, getCurrentTabUrl, getDebugState }: Props = $props();
 
 	let authenticated = $state(false);
 	let loading = $state(true);
@@ -54,7 +66,7 @@
 		<p>Loading...</p>
 	</div>
 {:else if authenticated}
-	<MainScreen onLogout={handleLogout} fetchPrs={() => prUseCase.fetchPrs()} getCachedPrs={() => prUseCase.getCachedPrs()} loadPrsWithCache={(minutes: number) => prUseCase.loadPrsWithCache(minutes)} {subscribeToMessages} {onNavigate} {getCurrentTabUrl} />
+	<MainScreen onLogout={handleLogout} fetchPrs={() => prUseCase.fetchPrs()} {fetchEpicTree} {getClaudeSessions} {getSessionIssueMappings} getCachedPrs={() => prUseCase.getCachedPrs()} loadPrsWithCache={(minutes: number) => prUseCase.loadPrsWithCache(minutes)} {subscribeToMessages} {subscribeToMappingChanges} {pinnedTabsStore} {onNavigate} {onOpenWorkspace} {getCurrentTabUrl} {getDebugState} />
 {:else}
 	<LoginScreen controller={deviceFlowController} />
 {/if}
